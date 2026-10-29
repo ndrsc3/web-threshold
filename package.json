@@ -1,6 +1,6 @@
 {
   "name": "@ndrsc3/web-threshold",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The Threshold — a single-input, secret-to-tier entry gate as a Web Component (<web-threshold>).",
   "type": "module",
   "repository": {

@@ -1,8 +1,8 @@
 /**
  * The Threshold — <web-threshold>
  *
- * A single static input field rendered as a custom element. The visitor types a
- * phrase; if it matches a key in `secrets`, the element emits a `tier-unlocked`
+ * A single static input field rendered as a custom element, with an optional
+ * prompt (`label`) and submit button (`button`). The visitor types a phrase; if it matches a key in `secrets`, the element emits a `tier-unlocked`
  * CustomEvent carrying the mapped tier. A non-matching phrase fails silently —
  * no error message, no shake, no "try again" (the contract's "no error
  * theater"). No persistence, no admin UI, no token URLs. The consuming page owns
@@ -24,11 +24,10 @@ export declare class WebThreshold extends HTMLElement {
     set secrets(map: SecretMap);
     get secrets(): SecretMap;
     connectedCallback(): void;
-    attributeChangedCallback(name: string, _old: string | null, value: string | null): void;
+    attributeChangedCallback(name: string, old: string | null, value: string | null): void;
     /**
      * Submit the current value, as pressing return would. The phone number pad
-     * has no return key, so a consumer using inputmode="numeric" wires its own
-     * button to this.
+     * has no return key: set the `button` attribute, or wire your own button to this.
      */
     submit(): void;
 }

@@ -108,4 +108,43 @@ describe("<web-threshold>", () => {
     (el as unknown as { submit(): void }).submit();
     expect(tier()).toEqual({ tier: "collaborator" });
   });
+
+  it("renders no prompt or button by default", () => {
+    expect(el.shadowRoot!.querySelector("label")).toBeNull();
+    expect(el.shadowRoot!.querySelector("button")).toBeNull();
+    expect(el.shadowRoot!.querySelector("input")!.getAttribute("aria-label")).toBeTruthy();
+  });
+
+  it("label renders a visible prompt that names the input", () => {
+    el.setAttribute("label", "Enter case no.");
+    const label = el.shadowRoot!.querySelector("label")!;
+    expect(label.textContent).toBe("Enter case no.");
+    expect(label.getAttribute("part")).toBe("label");
+    expect(label.getAttribute("for")).toBe(el.shadowRoot!.querySelector("input")!.id);
+  });
+
+  it("label and button text are escaped, not parsed as HTML", () => {
+    el.setAttribute("label", "<b>case</b>");
+    el.setAttribute("button", "<i>go</i>");
+    expect(el.shadowRoot!.querySelector("b")).toBeNull();
+    expect(el.shadowRoot!.querySelector("i")).toBeNull();
+    expect(el.shadowRoot!.querySelector("label")!.textContent).toBe("<b>case</b>");
+  });
+
+  it("button renders a submit button that unlocks", () => {
+    el.setAttribute("button", "Submit");
+    const tier = captureTier(el);
+    el.shadowRoot!.querySelector("input")!.value = "open sesame";
+    const button = el.shadowRoot!.querySelector("button")!;
+    expect(button.textContent).toBe("Submit");
+    expect(button.getAttribute("part")).toBe("button");
+    button.click();
+    expect(tier()).toEqual({ tier: "gardener" });
+  });
+
+  it("keeps the typed value when label or button changes", () => {
+    el.shadowRoot!.querySelector("input")!.value = "half typed";
+    el.setAttribute("label", "Prompt");
+    expect(el.shadowRoot!.querySelector("input")!.value).toBe("half typed");
+  });
 });
