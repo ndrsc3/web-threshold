@@ -1,14 +1,14 @@
 /**
- * The Threshold — v0.1
+ * The Threshold — <web-threshold>
  *
  * A single static input field rendered as a custom element. The visitor types a
  * phrase; if it matches a key in `secrets`, the element emits a `tier-unlocked`
  * CustomEvent carrying the mapped tier. A non-matching phrase fails silently —
- * no error message, no shake, no "try again" (the v0.1 contract's "no error
+ * no error message, no shake, no "try again" (the contract's "no error
  * theater"). No persistence, no admin UI, no token URLs. The consuming page owns
  * what happens on unlock; the Threshold only emits the event.
  *
- * Contract: docs/threshold/00-Index.md § v0.1 Contract.
+ * Contract: README.md § Contract.
  */
 
 export type TierName = string;
@@ -21,7 +21,7 @@ export interface TierUnlockedDetail {
   tier: TierName;
 }
 
-export class FinkaThreshold extends HTMLElement {
+export class WebThreshold extends HTMLElement {
   #secrets: SecretMap = {};
   #input: HTMLInputElement | null = null;
 
@@ -53,6 +53,8 @@ export class FinkaThreshold extends HTMLElement {
   #render(): void {
     const root = this.attachShadow({ mode: "open" });
     const placeholder = this.getAttribute("placeholder") ?? "";
+    // A numeric code wants the phone's number pad: inputmode="numeric".
+    const inputmode = this.getAttribute("inputmode") ?? "text";
     root.innerHTML = `
       <style>
         :host { display: block; }
@@ -73,6 +75,7 @@ export class FinkaThreshold extends HTMLElement {
         <input
           part="input"
           type="text"
+          inputmode="${inputmode.replace(/"/g, "&quot;")}"
           name="threshold"
           placeholder="${placeholder.replace(/"/g, "&quot;")}"
           aria-label="Enter a phrase to continue"
@@ -84,6 +87,15 @@ export class FinkaThreshold extends HTMLElement {
     `;
     this.#input = root.querySelector("input");
     root.querySelector("form")?.addEventListener("submit", this.#onSubmit);
+  }
+
+  /**
+   * Submit the current value, as pressing return would. The phone number pad
+   * has no return key, so a consumer using inputmode="numeric" wires its own
+   * button to this.
+   */
+  submit(): void {
+    this.shadowRoot?.querySelector("form")?.requestSubmit();
   }
 
   #onSubmit = (event: Event): void => {

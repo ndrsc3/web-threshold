@@ -14,7 +14,7 @@ interface ThresholdEl extends HTMLElement {
 
 function mount(): ThresholdEl {
   document.body.innerHTML = "";
-  const el = document.createElement("finka-threshold") as ThresholdEl;
+  const el = document.createElement("web-threshold") as ThresholdEl;
   el.secrets = SECRETS;
   document.body.appendChild(el);
   return el;
@@ -36,7 +36,7 @@ function captureTier(el: ThresholdEl): () => TierUnlockedDetail | null {
   return () => detail;
 }
 
-describe("<finka-threshold> v0.1", () => {
+describe("<web-threshold>", () => {
   let el: ThresholdEl;
   beforeEach(() => {
     el = mount();
@@ -88,5 +88,24 @@ describe("<finka-threshold> v0.1", () => {
     );
     submit(el, "the latch lifts");
     expect(heard).toEqual({ tier: "agoridean" });
+  });
+
+  it("defaults the input to inputmode=text", () => {
+    expect(el.shadowRoot!.querySelector("input")!.getAttribute("inputmode")).toBe("text");
+  });
+
+  it("passes an inputmode attribute through to the input (number pad for numeric codes)", () => {
+    document.body.innerHTML = "";
+    const numeric = document.createElement("web-threshold") as ThresholdEl;
+    numeric.setAttribute("inputmode", "numeric");
+    document.body.appendChild(numeric);
+    expect(numeric.shadowRoot!.querySelector("input")!.getAttribute("inputmode")).toBe("numeric");
+  });
+
+  it("submit() unlocks like pressing return, for pads with no return key", () => {
+    const tier = captureTier(el);
+    el.shadowRoot!.querySelector("input")!.value = "vouchsafe";
+    (el as unknown as { submit(): void }).submit();
+    expect(tier()).toEqual({ tier: "collaborator" });
   });
 });

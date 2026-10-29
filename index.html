@@ -6,16 +6,16 @@
     <title>The Threshold — v0.1 demo</title>
     <style>
       :root {
-        --finka-sage: #e0edeb;
-        --finka-olive: #454f1c;
-        --finka-gold: #dec970;
-        --finka-terracotta: #c77d40;
-        --finka-cream: #f2ebc9;
+        --demo-sage: #e0edeb;
+        --demo-olive: #454f1c;
+        --demo-gold: #dec970;
+        --demo-terracotta: #c77d40;
+        --demo-cream: #f2ebc9;
       }
       body {
         font-family: Georgia, "Times New Roman", serif;
-        color: var(--finka-olive);
-        background: var(--finka-cream);
+        color: var(--demo-olive);
+        background: var(--demo-cream);
         max-width: 34rem;
         margin: 0 auto;
         padding: 4rem 1.5rem;
@@ -23,17 +23,17 @@
       }
       h1 { font-weight: 500; letter-spacing: 0.02em; }
       code {
-        background: var(--finka-sage);
+        background: var(--demo-sage);
         padding: 0.1em 0.4em;
         border-radius: 2px;
       }
-      finka-threshold {
+      web-threshold {
         margin: 2.5rem 0 1.5rem;
-        color: var(--finka-terracotta);
+        color: var(--demo-terracotta);
         font-size: 1.25rem;
       }
-      #status { color: var(--finka-olive); }
-      #status strong { color: var(--finka-terracotta); }
+      #status { color: var(--demo-olive); }
+      #status strong { color: var(--demo-terracotta); }
     </style>
   </head>
   <body>
@@ -43,13 +43,13 @@
       <code>vouchsafe</code> → collaborator. Anything else stays quiet.
     </p>
 
-    <finka-threshold placeholder="…"></finka-threshold>
+    <web-threshold placeholder="…"></web-threshold>
 
     <p id="status">tier: <strong>wanderer</strong></p>
 
     <script type="module">
       import "./src/index.ts";
-      const el = document.querySelector("finka-threshold");
+      const el = document.querySelector("web-threshold");
       el.secrets = {
         "open sesame": "gardener",
         "the latch lifts": "agoridean",

@@ -1,0 +1,4 @@
+node_modules/
+.DS_Store
+# dist/ is committed on purpose: git-tag installs and the jsDelivr CDN serve it
+# without a build step. Rebuild before every tag (README § Releasing).
