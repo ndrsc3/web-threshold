@@ -67,3 +67,7 @@ npm run build      # dist/: ES module + .d.ts
 - **v0.1.0** — first build, inside the `web_lafinka` monorepo.
 
 Naming: reusable web modules are `web-<module>`; sites are `web_<site>`.
+
+## License
+
+MIT (`LICENSE`).
