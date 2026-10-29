@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Threshold — v0.1 demo</title>
+    <style>
+      :root {
+        --finka-sage: #e0edeb;
+        --finka-olive: #454f1c;
+        --finka-gold: #dec970;
+        --finka-terracotta: #c77d40;
+        --finka-cream: #f2ebc9;
+      }
+      body {
+        font-family: Georgia, "Times New Roman", serif;
+        color: var(--finka-olive);
+        background: var(--finka-cream);
+        max-width: 34rem;
+        margin: 0 auto;
+        padding: 4rem 1.5rem;
+        line-height: 1.5;
+      }
+      h1 { font-weight: 500; letter-spacing: 0.02em; }
+      code {
+        background: var(--finka-sage);
+        padding: 0.1em 0.4em;
+        border-radius: 2px;
+      }
+      finka-threshold {
+        margin: 2.5rem 0 1.5rem;
+        color: var(--finka-terracotta);
+        font-size: 1.25rem;
+      }
+      #status { color: var(--finka-olive); }
+      #status strong { color: var(--finka-terracotta); }
+    </style>
+  </head>
+  <body>
+    <h1>The Threshold</h1>
+    <p>
+      Type a phrase. <code>open sesame</code> → gardener ·
+      <code>vouchsafe</code> → collaborator. Anything else stays quiet.
+    </p>
+
+    <finka-threshold placeholder="…"></finka-threshold>
+
+    <p id="status">tier: <strong>wanderer</strong></p>
+
+    <script type="module">
+      import "./src/index.ts";
+      const el = document.querySelector("finka-threshold");
+      el.secrets = {
+        "open sesame": "gardener",
+        "the latch lifts": "agoridean",
+        vouchsafe: "collaborator",
+      };
+      el.addEventListener("tier-unlocked", (e) => {
+        document.querySelector("#status strong").textContent = e.detail.tier;
+      });
+    </script>
+  </body>
+</html>

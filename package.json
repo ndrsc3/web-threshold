@@ -1,0 +1,29 @@
+{
+  "name": "@finka/threshold",
+  "version": "0.1.0",
+  "description": "The Threshold — a single-input, secret-to-tier entry gate as a Web Component. v0.1.",
+  "type": "module",
+  "main": "./dist/finka-threshold.js",
+  "module": "./dist/finka-threshold.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/finka-threshold.js"
+    }
+  },
+  "files": ["dist"],
+  "sideEffects": ["./dist/finka-threshold.js"],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && tsc -p tsconfig.json --emitDeclarationOnly --outDir dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "happy-dom": "^15.11.7",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  }
+}
