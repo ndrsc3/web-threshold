@@ -127,7 +127,8 @@ export class WebThreshold extends HTMLElement {
   #onSubmit = (event: Event): void => {
     event.preventDefault();
     const value = (this.#input?.value ?? "").trim();
-    const tier = this.#secrets[value];
+    // Own keys only: "constructor" or "__proto__" must not read as a matched phrase.
+    const tier = Object.hasOwn(this.#secrets, value) ? this.#secrets[value] : undefined;
     // Clear the field regardless — nothing carries over between attempts (no persistence).
     if (this.#input) this.#input.value = "";
     if (!tier) return; // silent fail — stay on the public surface

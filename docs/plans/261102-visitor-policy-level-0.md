@@ -119,12 +119,12 @@ New: an `./policy` export and a `bin` (a-8). `.` stays as it is.
 5. **Build:** as above. In a scratch clone, build the same source under the old and new vite configs; `dist/web-threshold.js` must match. Never build in the shared checkout, since `dist/` is tracked (a-9, b-6). Import `./policy` in Node with no DOM.
 6. **Consumer proof:** clone to scratch, commit a built `dist/` and tag there, `npm i git+file://<clone>#<tag>` in a scratch site, confirm `bin` links, run with a `.ts` config and read the output back. Then break the config and confirm a non-zero exit with no file written. Repeat with `--no-experimental-strip-types` and in a `"type": "commonjs"` site for the clear message (a-11, a-13, d-3).
 7. **Docs:** README section (config, presets, wiring, minimum Node for `.ts`, limits: a sign not a lock, `AdsBot-Google`, link previews, no-build sites); update `package.json`'s `description`; board.
-8. **Release, owner-gated:** build from a clean clone at the commit to be tagged, never the shared checkout. Compare `dist/web-threshold.js` with the previous tag's and name any gate change in the release notes (c-2). Version number, tag, push, offer the bump. On the first adopter, check the generated file on a Vercel preview.
+8. **Release, owner-approved as v0.4.0 (261102):** build from a clean clone at the commit to be tagged, never the shared checkout. Compare `dist/web-threshold.js` with the previous tag's and name any gate change in the release notes (c-2). Tag, push, offer the bump. On the first adopter, check the generated file on a Vercel preview.
 
 ## Pickup — start here next session
 
 - **Order:** tasks 1 to 7 in order. Any machine with Node 24; task 1 needs network for its sources.
 - **Commits:** the checkout is shared with sealed-tiers work. Before task 5, commit this plan's paths by pathspec to `main`, unpushed; never `src/gate/` or `dist/` (c-1).
-- **Owner-owed inputs:** none to proceed before task 8. Show the owner the bot list after task 1, without waiting on it (c-5). There the owner picks the version number, since `v0.4` is currently promised to sealed tiers.
+- **Owner-owed inputs:** none to proceed before task 8. Show the owner the bot list after task 1, without waiting on it (c-5). Version: v0.4.0, with sealed tiers moving to v0.5 (owner 261102).
 - **Do not re-derive:** noesis is insulated by its `v0.3.0` pin, with its `main.ts` typechecked against the packed package after the `src/gate` move (`9435f9f`). Multi-entry Vite leaves `dist/web-threshold.js` unchanged, and type stripping loads a `.ts` config on Node 24.22 (pass 261102-a, simulated in scratch).
 - **Stay out of:** `src/gate/` and `web_noesis`.

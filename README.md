@@ -2,14 +2,14 @@
 
 **The Threshold** — a reusable entry gate as a Web Component. A single input field; what the visitor types decides which tier of content opens. No accounts, no login modals. A wrong phrase fails silently.
 
-Used by La Finka's sites and others: lafinka.space, noesis.lafinka.space, banana.rodeo (planned), and the La Finka digital garden (planned, with the v0.4 encryption mode).
+Used by La Finka's sites and others: lafinka.space, noesis.lafinka.space, banana.rodeo (planned), and the La Finka digital garden (planned, with the v0.5 sealed mode).
 
 ## Install
 
 Pin a tag. Each site upgrades on purpose.
 
 ```bash
-npm install github:ndrsc3/web-threshold#v0.3.0
+npm install github:ndrsc3/web-threshold#v0.4.0
 ```
 
 ```ts
@@ -20,7 +20,7 @@ import type { WebThreshold } from "@ndrsc3/web-threshold";
 Plain HTML, no build step:
 
 ```html
-<script type="module" src="https://cdn.jsdelivr.net/gh/ndrsc3/web-threshold@v0.3.0/dist/web-threshold.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/gh/ndrsc3/web-threshold@v0.4.0/dist/web-threshold.js"></script>
 ```
 
 ## Contract
@@ -44,7 +44,7 @@ Plain HTML, no build step:
 - `inputmode` passes through to the input (`numeric` gets the phone number pad). That pad has no return key, so set `button`, or wire your own button to `t.submit()`.
 - **Styling:** the element inherits `font` and `color`. Restyle any piece from the page with `::part(form)`, `::part(label)`, `::part(input)` and `::part(button)`.
 
-**Security model (plain mode):** the secrets map ships to the browser, so the gate is atmosphere, not protection. Real gating is the planned v0.4 encryption mode (`docs/plans/`).
+**Security model (plain mode):** the secrets map ships to the browser, so the gate is atmosphere, not protection. Sealed mode is planned for v0.5 (`docs/plans/`).
 
 ## Visitor policy: robots.txt from one config
 
@@ -129,6 +129,7 @@ npm run build      # dist/: ES module + .d.ts
 
 ## History
 
+- **v0.4.0** — Visitor policy: `defineThreshold()` (`@ndrsc3/web-threshold/policy`), four presets, raw `extra` lines and `web-threshold robots`. Gate fix: inherited object keys such as `constructor` no longer fire `tier-unlocked`, which changes `dist/web-threshold.js`. Adds the LICENSE file. A site naming a bot that later leaves the list stops building, by design.
 - **v0.3.0** — `label` and `button` attributes; `::part(label)` and `::part(button)`. Labels and button text are HTML-escaped.
 - **v0.2.0** — extracted from `web_lafinka` (`packages/threshold`, branch `path0/threshold-v0.1`, `a04bb6b`) into its own repo. Renamed `<finka-threshold>` → `<web-threshold>` (breaking). Added the `inputmode` passthrough and `submit()`.
 - **v0.1.0** — first build, inside the `web_lafinka` monorepo.

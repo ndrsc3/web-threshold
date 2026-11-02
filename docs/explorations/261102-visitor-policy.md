@@ -1,7 +1,7 @@
 ---
 type: exploration
-status: active
-closes-when: a visitor-policy plan is written in docs/plans/ with its order against v0.4 decided, or the idea is dropped
+status: promoted
+closes-when: a visitor-policy plan is written in docs/plans/ with its order against sealed tiers decided, or the idea is dropped
 tags:
   - threshold
   - bots
@@ -16,11 +16,11 @@ date: 261102
 |-------|-------|
 | **Trigger** | Conversation 261031–261102: reading The Crawler Zoo (crawlerzoo.com) to see what the Threshold should absorb |
 | **Modules** | `src/` (today's `<web-threshold>`), planned `policy` / `robots` / `guard` entry points, `data/bots.json` |
-| **Outcome** | Knowledge captured; direction agreed in part; order against v0.4 still open |
+| **Outcome** | Plan created for level 0; sealed tiers (v0.5) run in parallel (owner 261102); levels 1–2 stay on the board |
 
 ## Context
 
-The Threshold today is a browser component: one input, a typed phrase opens a tier (README § Contract). Its security model in plain mode is "atmosphere, not protection", and v0.4 adds sealed tiers (`docs/plans/261029-v0.4-encrypted-tiers.md`).
+The Threshold today is a browser component: one input, a typed phrase opens a tier (README § Contract). Its security model in plain mode is "atmosphere, not protection", and v0.5 adds sealed tiers (`docs/plans/261029-v0.5-encrypted-tiers.md`).
 
 The owner wants the Threshold to grow into the place where a site configures **how anyone or anything comes in**: people through the gate, bots through rules. Specifically:
 
@@ -70,7 +70,7 @@ One repo (`web-threshold`), one package (`@ndrsc3/web-threshold`), separate entr
 
 ```
 web-threshold/
-  src/gate/      <web-threshold> component (today's code; v0.4 sealed mode later)
+  src/gate/      <web-threshold> component (today's code; v0.5 sealed mode later)
   src/policy/    defineThreshold() — config schema + types
   src/robots/    policy → robots.txt (+ CLI: `web-threshold robots`)
   src/guard/     policy → request check: refuse / allow / record
@@ -114,22 +114,23 @@ Open costs to check: the middleware runs on every request (expected to stay with
 
 ### 6. Still open
 
-- **Order against v0.4** (owner: explore, then decide). Levels 0–1 don't touch the gate code, so they could ship first without blocking sealed tiers. Doing v0.4 first keeps the noesis v1 and garden timeline (~261106) intact.
-- **The project's Key Constraints #3 and #5** ("intentionally tiny… no audit log"; "events out, not page ownership") are reopened by this direction. That's marked in the project note; it isn't decided yet.
+- **The project's Key Constraints #3 and #5.** #3's "tiny" is scoped to the gate (owner 261102). Its audit-log part and #5 ("events out, not page ownership") stay open until guard level 1.
+- **Catalogue.** Level 0 ships a hand-written list, not the merge in § 2 (owner 261102); `refresh-bots` and arcjet wait.
 - **Viewer:** later, and configurable per site.
 - **The cost of every-request middleware on Vercel:** unverified.
 - **Licensing:** arcjet and ai.robots.txt are MIT, so attribution goes in `data/` and the README.
 
 ## Action Items
 
-- [ ] Decide the order against v0.4
-- [ ] Draft `threshold.config` schema and the three-kinds mapping over the merged catalogue
-- [ ] Confirm the Vercel middleware cost at our traffic
-- [ ] When committed → `/plan` in `docs/plans/` and a version number; close this note as promoted
+- [x] Decide the order against sealed tiers — in parallel (owner 261102)
+- [x] Draft `threshold.config` schema and the three-kinds mapping — level 0 plan
+- [ ] Confirm the Vercel middleware cost at our traffic — on the board
+- [x] `/plan` in `docs/plans/` — level 0 plan; version number decided at its release
 
 ## Related
 
-- `docs/plans/261029-v0.4-encrypted-tiers.md`
+- Plan: `docs/plans/261102-visitor-policy-level-0.md`
+- `docs/plans/261029-v0.5-encrypted-tiers.md`
 - `vault-FinkaLabs/Projects/The Threshold/The Threshold.md`
 - `vault-FinkaLabs/Signal/Data/The Crawler Zoo — Live Crawler Exhibit.md`
 - `vault-FinkaLabs/Knowledge/Dev/Designing for an AI-Scraped Web.md`

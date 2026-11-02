@@ -42,6 +42,15 @@ describe("<web-threshold>", () => {
     el = mount();
   });
 
+  it.each(["constructor", "toString", "hasOwnProperty", "__proto__"])(
+    "stays silent on the inherited object key %s",
+    (phrase) => {
+      const tier = captureTier(el);
+      submit(el, phrase);
+      expect(tier()).toBeNull();
+    },
+  );
+
   it("renders a single input inside a shadow root", () => {
     const inputs = el.shadowRoot!.querySelectorAll("input");
     expect(inputs.length).toBe(1);
