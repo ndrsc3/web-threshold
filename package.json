@@ -42,11 +42,13 @@
     "test": "vitest run",
     "demo:build": "node scripts/build-demo.mjs",
     "demo": "npm run demo:build && vite preview --outDir .demo --port 4173",
-    "test:consumer": "node scripts/test-consumer.mjs"
+    "test:consumer": "node scripts/test-consumer.mjs",
+    "test:browsers": "node scripts/test-browsers.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
     "happy-dom": "^15.11.7",
+    "playwright": "^1.64.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
     "vitest": "^2.1.8"
