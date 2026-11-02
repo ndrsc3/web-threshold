@@ -3,17 +3,17 @@ var y = (e) => {
 };
 var b = (e, o, t) => o.has(e) || y("Cannot " + t);
 var i = (e, o, t) => (b(e, o, "read from private field"), t ? t.call(e) : o.get(e)), h = (e, o, t) => o.has(e) ? y("Cannot add the same private member more than once") : o instanceof WeakSet ? o.add(e) : o.set(e, t), m = (e, o, t, r) => (b(e, o, "write to private field"), r ? r.call(e, t) : o.set(e, t), t), c = (e, o, t) => (b(e, o, "access private method"), t);
-var u, n, l, v, f, p;
+var l, n, a, v, f, p;
 class w extends HTMLElement {
   constructor() {
     super(...arguments);
-    h(this, l);
-    h(this, u, {});
+    h(this, a);
+    h(this, l, {});
     h(this, n, null);
     h(this, p, (t) => {
-      var a;
+      var u;
       t.preventDefault();
-      const r = (((a = i(this, n)) == null ? void 0 : a.value) ?? "").trim(), s = i(this, u)[r];
+      const r = (((u = i(this, n)) == null ? void 0 : u.value) ?? "").trim(), s = Object.hasOwn(i(this, l), r) ? i(this, l)[r] : void 0;
       i(this, n) && (i(this, n).value = ""), s && this.dispatchEvent(
         new CustomEvent("tier-unlocked", {
           detail: { tier: s },
@@ -28,13 +28,13 @@ class w extends HTMLElement {
   }
   /** Consumer sets this — `el.secrets = { "phrase": "tier" }`. Never persisted. */
   set secrets(t) {
-    m(this, u, t ?? {});
+    m(this, l, t ?? {});
   }
   get secrets() {
-    return i(this, u);
+    return i(this, l);
   }
   connectedCallback() {
-    this.shadowRoot || c(this, l, v).call(this);
+    this.shadowRoot || c(this, a, v).call(this);
   }
   attributeChangedCallback(t, r, s) {
     var g;
@@ -43,8 +43,8 @@ class w extends HTMLElement {
       i(this, n).placeholder = s ?? "";
       return;
     }
-    const a = ((g = i(this, n)) == null ? void 0 : g.value) ?? "";
-    c(this, l, f).call(this), i(this, n) && (i(this, n).value = a);
+    const u = ((g = i(this, n)) == null ? void 0 : g.value) ?? "";
+    c(this, a, f).call(this), i(this, n) && (i(this, n).value = u);
   }
   /**
    * Submit the current value, as pressing return would. The phone number pad
@@ -55,7 +55,7 @@ class w extends HTMLElement {
     (r = (t = this.shadowRoot) == null ? void 0 : t.querySelector("form")) == null || r.requestSubmit();
   }
 }
-u = new WeakMap(), n = new WeakMap(), l = new WeakSet(), v = function() {
+l = new WeakMap(), n = new WeakMap(), a = new WeakSet(), v = function() {
   const t = this.attachShadow({ mode: "open" });
   t.innerHTML = `
       <style>
@@ -84,17 +84,17 @@ u = new WeakMap(), n = new WeakMap(), l = new WeakSet(), v = function() {
         }
       </style>
       <form part="form" autocomplete="off" novalidate></form>
-    `, t.querySelector("form").addEventListener("submit", i(this, p)), c(this, l, f).call(this);
+    `, t.querySelector("form").addEventListener("submit", i(this, p)), c(this, a, f).call(this);
 }, /** Build the form's contents from the current attributes. */
 f = function() {
-  const t = this.shadowRoot.querySelector("form"), r = this.getAttribute("label"), s = this.getAttribute("button"), a = this.getAttribute("inputmode") ?? "text";
+  const t = this.shadowRoot.querySelector("form"), r = this.getAttribute("label"), s = this.getAttribute("button"), u = this.getAttribute("inputmode") ?? "text";
   t.innerHTML = `
       ${r ? `<label part="label" for="threshold-input">${d(r)}</label>` : ""}
       <input
         part="input"
         id="threshold-input"
         type="text"
-        inputmode="${d(a)}"
+        inputmode="${d(u)}"
         name="threshold"
         placeholder="${d(this.getAttribute("placeholder") ?? "")}"
         ${r ? "" : 'aria-label="Enter a phrase to continue"'}
