@@ -1,7 +1,7 @@
 {
   "name": "@ndrsc3/web-threshold",
   "version": "0.3.0",
-  "description": "The Threshold — a single-input, secret-to-tier entry gate as a Web Component (<web-threshold>).",
+  "description": "The Threshold — how anyone or anything comes in: a single-input, secret-to-tier entry gate as a Web Component (<web-threshold>), and a generated robots.txt from one config.",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -15,17 +15,29 @@
     ".": {
       "types": "./dist/gate/index.d.ts",
       "import": "./dist/web-threshold.js"
+    },
+    "./policy": {
+      "types": "./dist/policy/index.d.ts",
+      "import": "./dist/policy.js"
     }
   },
-  "files": ["dist"],
-  "sideEffects": ["./dist/web-threshold.js"],
+  "bin": {
+    "web-threshold": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "./dist/web-threshold.js"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build && tsc -p tsconfig.json --emitDeclarationOnly --outDir dist",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "vite build && vite build -c vite.cli.config.ts && tsc -p tsconfig.json --emitDeclarationOnly --outDir dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.cli.json --noEmit",
     "test": "vitest run"
   },
   "devDependencies": {
+    "@types/node": "^24.19.2",
     "happy-dom": "^15.11.7",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",

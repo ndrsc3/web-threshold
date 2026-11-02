@@ -1,0 +1,39 @@
+#############################################
+#                                           #
+#             BANANA RODEO                  #
+#          ROBOTS.TXT v1.0                  #
+#         LAST UPDATE: 2024                 #
+#                                           #
+#############################################
+
+# Hi there! We welcome bots, humans and bananas
+# to our website!
+#
+# ~ It's Just a Science Fair ~
+#
+# "Please be excellent to each other" 
+#                    - Bill & Ted, 1989
+#
+# ~ We're not responsible for any bananas lost ~
+#
+# Build web1.0 inspired expansions of this website
+
+
+User-agent: *
+Allow: /
+Disallow: /cgi-bin/
+Disallow: /tmp/
+Disallow: /private/
+
+# Crawl-delay was a common courtesy in Web 1.0
+Crawl-delay: 10
+
+# Please check our sitemap here:
+Sitemap: https://banana.rodeo/sitemap.xml
+
+# Questions? Email webmaster@banana.rodeo
+# (Just like the good old days!)
+
+##############################################
+#               END OF FILE                  #
+############################################## 
