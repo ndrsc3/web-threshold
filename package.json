@@ -19,6 +19,10 @@
     "./policy": {
       "types": "./dist/policy/index.d.ts",
       "import": "./dist/policy.js"
+    },
+    "./sealed": {
+      "types": "./dist/gate/sealed-entry.d.ts",
+      "import": "./dist/web-threshold-sealed.js"
     }
   },
   "bin": {
@@ -28,13 +32,17 @@
     "dist"
   ],
   "sideEffects": [
-    "./dist/web-threshold.js"
+    "./dist/web-threshold.js",
+    "./dist/web-threshold-sealed.js"
   ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build && vite build -c vite.cli.config.ts && tsc -p tsconfig.json --emitDeclarationOnly --outDir dist",
+    "build": "vite build && vite build -c vite.sealed.config.ts && vite build -c vite.cli.config.ts && tsc -p tsconfig.json --emitDeclarationOnly --outDir dist",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.cli.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "demo:build": "node scripts/build-demo.mjs",
+    "demo": "npm run demo:build && vite preview --outDir .demo --port 4173",
+    "test:consumer": "node scripts/test-consumer.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

@@ -4,8 +4,10 @@ Status: active
 Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-encrypted-tiers.md`
 
 ## P1 — now
-- [ ] **v0.5 sealed tiers: design note** `[GATE]` — general sealed mode, eggs first, garden later; runs in parallel with level 0 (owner 261102); ▶ adversarial review
+- [ ] **v0.5 sealed mode: slice 1 close** `[GATE]` — built and reviewed; ▶ owner: open the phone bench; owner: WebKit and Firefox browser downloads, or defer them
   - plan: `docs/plans/261029-v0.5-encrypted-tiers.md` · design: `docs/plans/261102-v0.5-sealed-design.md`
+- [ ] **v0.5 sealed mode: slice 2** `[GATE]` — URL payloads and the shell: an egg opens an image; a whole gated page opens with its door. Brings back the element's exemption from the scan
+- [ ] **v0.5 sealed mode: slice 3** `[GATE]` — session memory in per-tab `sessionStorage`: a phrase on one page opens a section on another; a re-route arrives open
 
 ## P2 — next-up
 - [ ] **Confirm Vercel middleware cost and log retention** `[GUARD]` — every-request middleware at our traffic on Hobby, before committing to guard level 1

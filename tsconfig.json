@@ -18,5 +18,5 @@
     "types": []
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "src/robots/rfc9309.ts", "src/cli/**"]
+  "exclude": ["src/**/*.test.ts", "src/robots/rfc9309.ts", "src/cli/**", "src/seal/**"]
 }

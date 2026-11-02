@@ -1,0 +1,361 @@
+{
+  "payloads": {
+    "fox": {
+      "from": "notes/fox.txt",
+      "type": "text/plain"
+    },
+    "kiln": {
+      "from": "notes/kiln.txt",
+      "type": "text/plain"
+    },
+    "threshold": {
+      "from": "notes/threshold.txt",
+      "type": "text/plain"
+    }
+  },
+  "doors": [
+    {
+      "tier": "fox",
+      "phrase": "the fox was here",
+      "open": [
+        "fox"
+      ],
+      "data": {
+        "theme": "moss",
+        "message": "Something moved in the hedge."
+      }
+    },
+    {
+      "tier": "kiln",
+      "phrase": "the kiln is still warm",
+      "open": [
+        "kiln"
+      ],
+      "data": {
+        "theme": "ember",
+        "sound": "bell"
+      }
+    },
+    {
+      "tier": "threshold",
+      "phrase": "σας περιμένω στο κατώφλι",
+      "open": [
+        "threshold"
+      ],
+      "data": {
+        "theme": "dusk",
+        "message": "Καλώς ήρθατε."
+      }
+    },
+    {
+      "tier": "filler-04",
+      "phrase": "filler door number 04 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-05",
+      "phrase": "filler door number 05 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-06",
+      "phrase": "filler door number 06 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-07",
+      "phrase": "filler door number 07 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-08",
+      "phrase": "filler door number 08 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-09",
+      "phrase": "filler door number 09 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-10",
+      "phrase": "filler door number 10 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-11",
+      "phrase": "filler door number 11 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-12",
+      "phrase": "filler door number 12 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-13",
+      "phrase": "filler door number 13 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-14",
+      "phrase": "filler door number 14 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-15",
+      "phrase": "filler door number 15 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-16",
+      "phrase": "filler door number 16 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-17",
+      "phrase": "filler door number 17 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-18",
+      "phrase": "filler door number 18 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-19",
+      "phrase": "filler door number 19 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-20",
+      "phrase": "filler door number 20 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-21",
+      "phrase": "filler door number 21 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-22",
+      "phrase": "filler door number 22 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-23",
+      "phrase": "filler door number 23 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-24",
+      "phrase": "filler door number 24 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-25",
+      "phrase": "filler door number 25 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-26",
+      "phrase": "filler door number 26 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-27",
+      "phrase": "filler door number 27 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-28",
+      "phrase": "filler door number 28 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-29",
+      "phrase": "filler door number 29 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-30",
+      "phrase": "filler door number 30 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-31",
+      "phrase": "filler door number 31 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-32",
+      "phrase": "filler door number 32 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-33",
+      "phrase": "filler door number 33 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-34",
+      "phrase": "filler door number 34 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-35",
+      "phrase": "filler door number 35 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-36",
+      "phrase": "filler door number 36 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-37",
+      "phrase": "filler door number 37 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-38",
+      "phrase": "filler door number 38 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-39",
+      "phrase": "filler door number 39 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-40",
+      "phrase": "filler door number 40 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-41",
+      "phrase": "filler door number 41 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-42",
+      "phrase": "filler door number 42 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-43",
+      "phrase": "filler door number 43 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-44",
+      "phrase": "filler door number 44 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-45",
+      "phrase": "filler door number 45 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-46",
+      "phrase": "filler door number 46 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-47",
+      "phrase": "filler door number 47 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-48",
+      "phrase": "filler door number 48 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-49",
+      "phrase": "filler door number 49 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-50",
+      "phrase": "filler door number 50 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-51",
+      "phrase": "filler door number 51 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-52",
+      "phrase": "filler door number 52 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-53",
+      "phrase": "filler door number 53 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-54",
+      "phrase": "filler door number 54 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-55",
+      "phrase": "filler door number 55 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-56",
+      "phrase": "filler door number 56 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-57",
+      "phrase": "filler door number 57 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-58",
+      "phrase": "filler door number 58 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-59",
+      "phrase": "filler door number 59 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-60",
+      "phrase": "filler door number 60 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-61",
+      "phrase": "filler door number 61 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-62",
+      "phrase": "filler door number 62 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-63",
+      "phrase": "filler door number 63 opens nothing",
+      "open": []
+    },
+    {
+      "tier": "filler-64",
+      "phrase": "filler door number 64 opens nothing",
+      "open": []
+    }
+  ],
+  "allowPublic": [
+    "the fox was here",
+    "the kiln is still warm",
+    "σας περιμένω στο κατώφλι"
+  ]
+}

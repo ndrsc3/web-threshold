@@ -1,11 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { GENERATED_HEADER, generateRobots } from "../robots/index.js";
+import { seal } from "../seal/index.js";
 
 const CONFIG = "threshold.config.ts";
 const OUT = join("public", "robots.txt");
-const USAGE = "usage: web-threshold robots";
+const USAGE = "usage: web-threshold robots\n       web-threshold seal --doors <file> --out <dir> [--public-fixture]";
 
 /** Why Node couldn't load a `.ts` config, in words a site owner can act on. */
 function loadFailure(err: unknown): string {
@@ -60,6 +61,36 @@ async function robots(cwd: string, log: (line: string) => void): Promise<number>
   return 0;
 }
 
+interface SealArgs {
+  doors: string;
+  out: string;
+  publicFixture: boolean;
+}
+
+/** Strict on purpose: a phrase must never be passed here, and a typo must not be ignored. */
+function sealArgs(args: string[]): SealArgs | null {
+  const parsed: Partial<SealArgs> = { publicFixture: false };
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === "--public-fixture") parsed.publicFixture = true;
+    else if (arg === "--doors" || arg === "--out") {
+      const value = args[++index];
+      if (value === undefined) return null;
+      parsed[arg.slice(2) as "doors" | "out"] = value;
+    } else return null;
+  }
+  return parsed.doors && parsed.out ? (parsed as SealArgs) : null;
+}
+
+function runSeal(options: SealArgs, cwd: string, log: (line: string) => void): Promise<number> {
+  return seal({
+    doors: resolve(cwd, options.doors),
+    out: resolve(cwd, options.out),
+    publicFixture: options.publicFixture,
+    log,
+  });
+}
+
 /** Returns the process exit code. */
 export async function run(
   args: string[],
@@ -67,6 +98,10 @@ export async function run(
   log: (line: string) => void = console.error,
 ): Promise<number> {
   if (args.length === 1 && args[0] === "robots") return robots(cwd, log);
+  if (args[0] === "seal") {
+    const options = sealArgs(args.slice(1));
+    if (options) return runSeal(options, cwd, log);
+  }
   log(USAGE);
   return 1;
 }

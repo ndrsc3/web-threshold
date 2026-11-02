@@ -21,6 +21,11 @@ export interface TierUnlockedDetail {
   tier: TierName;
 }
 
+/** Payload of `threshold-error`: a fault, never a wrong phrase. */
+export interface ThresholdFaultDetail {
+  code: string;
+}
+
 export class WebThreshold extends HTMLElement {
   #secrets: SecretMap = {};
   #input: HTMLInputElement | null = null;
@@ -42,6 +47,19 @@ export class WebThreshold extends HTMLElement {
     // Guard: connectedCallback can fire more than once; only build the shadow tree once.
     if (this.shadowRoot) return;
     this.#render();
+    if (this.hasAttribute("sealed")) this.sealedAttached();
+  }
+
+  /** The sealed entry loads its bundle here. This entry can't open one. */
+  protected sealedAttached(): void {
+    void Promise.resolve().then(() => this.emitFault("sealed-needs-sealed-entry"));
+  }
+
+  protected emitFault(code: string): void {
+    console.error(`web-threshold: ${code}`);
+    this.dispatchEvent(
+      new CustomEvent<ThresholdFaultDetail>("threshold-error", { detail: { code }, bubbles: true, composed: true }),
+    );
   }
 
   attributeChangedCallback(name: string, old: string | null, value: string | null): void {
@@ -127,10 +145,19 @@ export class WebThreshold extends HTMLElement {
   #onSubmit = (event: Event): void => {
     event.preventDefault();
     const value = (this.#input?.value ?? "").trim();
-    // Own keys only: "constructor" or "__proto__" must not read as a matched phrase.
-    const tier = Object.hasOwn(this.#secrets, value) ? this.#secrets[value] : undefined;
     // Clear the field regardless — nothing carries over between attempts (no persistence).
     if (this.#input) this.#input.value = "";
+    this.handlePhrase(value);
+  };
+
+  /** What a submitted phrase does. The sealed entry overrides this. */
+  protected handlePhrase(value: string): void {
+    if (this.hasAttribute("sealed")) {
+      this.emitFault("sealed-needs-sealed-entry"); // never falls back to plain secrets
+      return;
+    }
+    // Own keys only: "constructor" or "__proto__" must not read as a matched phrase.
+    const tier = Object.hasOwn(this.#secrets, value) ? this.#secrets[value] : undefined;
     if (!tier) return; // silent fail — stay on the public surface
 
     this.dispatchEvent(
@@ -140,7 +167,7 @@ export class WebThreshold extends HTMLElement {
         composed: true,
       }),
     );
-  };
+  }
 }
 
 function escapeHtml(text: string): string {

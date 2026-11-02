@@ -44,7 +44,62 @@ Plain HTML, no build step:
 - `inputmode` passes through to the input (`numeric` gets the phone number pad). That pad has no return key, so set `button`, or wire your own button to `t.submit()`.
 - **Styling:** the element inherits `font` and `color`. Restyle any piece from the page with `::part(form)`, `::part(label)`, `::part(input)` and `::part(button)`.
 
-**Security model (plain mode):** the secrets map ships to the browser, so the gate is atmosphere, not protection. Sealed mode is planned for v0.5 (`docs/plans/`).
+**Security model (plain mode):** the secrets map ships to the browser, so the gate is atmosphere, not protection. Sealed mode hides phrases and what they open.
+
+## Sealed mode: the entry point to a labyrinth
+
+Unreleased, in progress for v0.5. A phrase opens a sealed record of keys plus free-form data of your own, and the element hands it to your page as an event. Nothing it opens is readable in the page's source, on a plain static host.
+
+**1. Write a doors file.** This is the config and the mapping: each door says what its phrase opens, and what data your page receives. Keep it out of git and out of your build output, because it holds the phrases.
+
+```json
+{
+  "payloads": { "note": { "from": "private/note.txt", "type": "text/plain" } },
+  "doors": [
+    { "tier": "fox", "phrase": "the fox was here", "open": ["note"], "data": { "theme": "moss" } }
+  ],
+  "allowPublic": []
+}
+```
+
+**2. Seal after your site builds.**
+
+```bash
+web-threshold seal --doors doors.json --out dist
+```
+
+This writes `dist/s/site.json`, proves each phrase opens exactly its own payloads, and stops the build if a secret is found in your public files.
+
+**3. Use the sealed entry, and react to the event.** The element never navigates, styles or plays anything: that's your page.
+
+```html
+<web-threshold sealed="/s/site.json" report-wrong button="Enter"></web-threshold>
+<script type="module">
+  import "@ndrsc3/web-threshold/sealed";
+  const el = document.querySelector("web-threshold");
+  el.addEventListener("tier-unlocked", async ({ detail }) => {
+    document.documentElement.dataset.theme = detail.data?.theme;
+    if (detail.names.includes("note")) note.textContent = await (await detail.open("note")).text();
+  });
+</script>
+```
+
+- **Adding, changing or removing a door** is one entry plus a rebuild. There's no live editing, and removal only affects new builds: anyone holding an old copy and its phrase can still open that copy. Each build also changes the salt.
+- **`data` is yours.** Add any key (`sound`, `route`, `step`) and read it in your handler, with no release of this package. Values stay hidden, but your handler code, class names and asset names are public, so a truly hidden effect needs its assets sealed too. Check a route's origin before following it, and don't put `data` into `innerHTML`.
+- **Matching is forgiving.** Case, spacing, curly quotes and accents are ignored: `σας`, `σάς` and `ΣΑΣ` open the same door. Phrases that differ only that way count as duplicates and stop the build.
+- **Wrong phrases are silent** unless you set `report-wrong`, which emits `tier-rejected`. Faults (a bad bundle, a failed fetch) emit `threshold-error` with a `code`, never `tier-rejected`.
+- **While a phrase is being checked**, the element sets `busy` and `aria-busy`, which you can style. A slow phone can take a moment.
+
+**What the build check does.** A secret found in your public files stops the build if it's 3+ words or 16+ characters; a shorter match warns. `allowPublic` lists exact strings that are meant to be public, such as a clue or a footer a sealed note shares with the site. It reads through tags, JSON and URL escapes, HTML entities and `.gz`/`.br`, but not other encodings such as base64, and it can't see inside images. In a language written without spaces, a sealed note is only matched in whole runs between punctuation. Unknown file types stop the build, because they can't be checked.
+
+**Limits:**
+- Anyone can copy the file and guess offline, as fast as their hardware allows. Weak phrases only get a warning, which is fine for eggs. For anything you care about, use several random words. Not for personal, financial or regulated data.
+- The door count is public: it's the length of an array.
+- A script on the page can see phrases and opened content, so sealed pages shouldn't load third-party scripts. Self-host this element there rather than using the CDN. `seal` warns if it sees an external script beside a sealed gate.
+- Set `sealed` before the element connects. Setting it later emits `threshold-error`.
+- Not yet: images and other binary files, whole gated pages, remembering unlocks across pages. Text payloads are capped at 64 KiB.
+
+To try it: `npm run build && npm run demo`, then open `http://localhost:4173`.
 
 ## Visitor policy: robots.txt from one config
 

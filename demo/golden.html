@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Threshold — golden bundle</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 34rem; margin: 0 auto; padding: 2rem 1rem; background: #fff; color: #222; }
+    </style>
+  </head>
+  <body>
+    <h1>Golden bundle</h1>
+    <web-threshold sealed="/golden.json" report-wrong button="Enter"></web-threshold>
+    <p id="out" role="status"></p>
+    <script type="module">
+      import "/web-threshold-sealed.js";
+      const out = document.getElementById("out");
+      const el = document.querySelector("web-threshold");
+      el.addEventListener("tier-unlocked", async (e) => {
+        const text = await (await e.detail.open("note")).text();
+        out.textContent = `${e.detail.tier} | ${JSON.stringify(e.detail.data)} | ${text}`;
+      });
+      el.addEventListener("tier-rejected", () => (out.textContent = "rejected"));
+      el.addEventListener("threshold-error", (e) => (out.textContent = `fault ${e.detail.code}`));
+    </script>
+  </body>
+</html>

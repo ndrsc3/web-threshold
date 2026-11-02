@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en" data-theme="dusk">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Threshold — sealed demo</title>
+    <style>
+      :root { --ink: #454f1c; --paper: #f2ebc9; --accent: #c77d40; }
+      [data-theme="moss"] { --ink: #e6efd4; --paper: #2f3a1b; --accent: #dec970; }
+      [data-theme="ember"] { --ink: #f7e3cf; --paper: #47200f; --accent: #f0a868; }
+      html { background: var(--paper); transition: background 0.4s; }
+      body {
+        font-family: Georgia, "Times New Roman", serif;
+        color: var(--ink);
+        max-width: 34rem;
+        margin: 0 auto;
+        padding: 3rem 1rem;
+        line-height: 1.5;
+      }
+      h1 { font-weight: 500; margin-top: 0; }
+      web-threshold { margin: 2rem 0 1rem; color: var(--accent); font-size: 1.25rem; }
+      web-threshold[busy] { opacity: 0.5; }
+      #tier { color: var(--accent); }
+      #reveal { white-space: pre-wrap; border-left: 2px solid var(--accent); padding-left: 1em; font: inherit; }
+      #wrong { min-height: 1.5em; font-style: italic; }
+      code { overflow-wrap: anywhere; }
+    </style>
+  </head>
+  <body>
+    <h1>The Threshold, sealed</h1>
+    <p>Each phrase opens something different, and what it opens isn't in this page's source. Try <code>the fox was here</code>, <code>the kiln is still warm</code> or <code>σας περιμένω στο κατώφλι</code>.</p>
+
+    <web-threshold sealed="/s/site.json" report-wrong label="Speak the phrase" button="Enter" placeholder="…"></web-threshold>
+
+    <p id="wrong" role="status"></p>
+    <p>opened: <strong id="tier">nothing yet</strong></p>
+    <p id="message"></p>
+    <pre id="reveal" hidden></pre>
+
+    <script type="module">
+      import "/web-threshold-sealed.js";
+      import { applyUnlock } from "/handler.js";
+
+      const el = document.querySelector("web-threshold");
+      const wrong = document.getElementById("wrong");
+      const page = {
+        root: document.documentElement,
+        tier: document.getElementById("tier"),
+        message: document.getElementById("message"),
+        reveal: document.getElementById("reveal"),
+        go: (url) => location.assign(url),
+        sound: () => {
+          const audio = new AudioContext();
+          const tone = audio.createOscillator();
+          const gain = audio.createGain();
+          gain.gain.setValueAtTime(0.2, audio.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.8);
+          tone.connect(gain).connect(audio.destination);
+          tone.start();
+          tone.stop(audio.currentTime + 0.8);
+        },
+      };
+      el.addEventListener("tier-unlocked", (e) => {
+        wrong.textContent = "";
+        void applyUnlock(e.detail, page);
+      });
+      el.addEventListener("tier-rejected", () => (wrong.textContent = "Nothing opens to that."));
+      el.addEventListener("threshold-error", (e) => (wrong.textContent = `Fault: ${e.detail.code}`));
+    </script>
+  </body>
+</html>
