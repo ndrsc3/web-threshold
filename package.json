@@ -10,10 +10,10 @@
   },
   "main": "./dist/web-threshold.js",
   "module": "./dist/web-threshold.js",
-  "types": "./dist/index.d.ts",
+  "types": "./dist/gate/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/gate/index.d.ts",
       "import": "./dist/web-threshold.js"
     }
   },
