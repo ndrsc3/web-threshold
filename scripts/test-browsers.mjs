@@ -62,7 +62,9 @@ async function runEngine(name, engine) {
     await waitFor("#out", "golden note");
 
     await page.goto(`${base}/`);
-    if (await page.content().then((html) => html.includes("third stone"))) throw new Error("sealed text in the page source");
+    // The bytes as served, not the parsed page: parsing can drop what a person could still read.
+    const source = await (await page.request.get(`${base}/`)).text();
+    if (source.includes("third stone")) throw new Error("sealed text in the page source");
     await enter(page, "not a real phrase");
     await waitFor("#wrong", "Nothing opens");
     await enter(page, "THE FOX  was here");
