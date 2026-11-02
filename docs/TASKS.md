@@ -4,9 +4,8 @@ Status: active
 Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-encrypted-tiers.md`
 
 ## P1 — now
-- [ ] **v0.5 sealed mode: slice 1 close** `[GATE]` — built and reviewed; ▶ owner: open the phone bench; owner: WebKit and Firefox browser downloads, or defer them
+- [ ] **v0.5 sealed mode: phone bench** `[GATE]` — slices 1 and 2 built, reviewed, and passing in Chromium, WebKit and Firefox; ▶ owner: open `bench.html` on a real phone over HTTPS; over 1 s returns to the owner
   - plan: `docs/plans/261029-v0.5-encrypted-tiers.md` · design: `docs/plans/261102-v0.5-sealed-design.md`
-- [ ] **v0.5 sealed mode: slice 2** `[GATE]` — URL payloads and the shell: an egg opens an image; a whole gated page opens with its door. Brings back the element's exemption from the scan
 - [ ] **v0.5 sealed mode: slice 3** `[GATE]` — session memory in per-tab `sessionStorage`: a phrase on one page opens a section on another; a re-route arrives open
 
 ## P2 — next-up

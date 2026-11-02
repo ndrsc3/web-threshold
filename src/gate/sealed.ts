@@ -3,7 +3,7 @@ import {
   deriveKek,
   fold1,
   fromB64,
-  openPayload,
+  openEntry,
   openSlots,
   parseBundle,
   type Bundle,
@@ -109,10 +109,29 @@ export class SealedThreshold extends WebThreshold {
       open: async (name) => {
         if (!Object.hasOwn(record.open, name)) throw new Error(`this door doesn't open "${name}"`);
         const entry = record.open[name]!;
-        return new Blob([(await openPayload(bundle, entry)) as BlobPart], { type: entry.type });
+        try {
+          return new Blob([(await openEntry(bundle, entry, (src) => this.#fetchFile(src))) as BlobPart], { type: entry.type });
+        } catch (err) {
+          // Such as a host answering a .sealed file with its HTML fallback: it fails the tag.
+          this.emitFault(err instanceof BundleError ? err.code : "payload-unreadable");
+          throw err;
+        }
       },
     };
     this.dispatchEvent(new CustomEvent("tier-unlocked", { detail, bubbles: true, composed: true }));
+  }
+
+  async #fetchFile(src: string): Promise<Uint8Array> {
+    const url = new URL(src, location.href);
+    if (url.origin !== location.origin) throw new BundleError("cross-origin");
+    let response: Response | null = null;
+    try {
+      response = await fetch(url);
+    } catch {
+      // Reported below.
+    }
+    if (!response?.ok) throw new BundleError("fetch-failed");
+    return new Uint8Array(await response.arrayBuffer());
   }
 
   #setBusy(busy: boolean): void {

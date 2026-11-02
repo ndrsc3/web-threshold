@@ -23,7 +23,11 @@ export interface Bundle {
 export interface OpenEntry {
   k: string;
   type: string;
+  /** Inline: the payload's id in the bundle. */
   pid?: string;
+  /** URL-loaded: where its raw ciphertext is, and the IV, so the file itself is pure ciphertext. */
+  src?: string;
+  iv?: string;
 }
 
 export interface SealedRecord {
@@ -91,6 +95,22 @@ export async function decrypt(key: Uint8Array, sealed: Sealed): Promise<Uint8Arr
     { name: "AES-GCM", iv: buffer(fromB64(sealed.iv)) },
     await aes(key),
     buffer(fromB64(sealed.ct)),
+  );
+  return new Uint8Array(plain);
+}
+
+/** Inline or URL-loaded; `readFile` is how this side reaches a `.sealed` file. */
+export async function openEntry(
+  bundle: Bundle,
+  entry: OpenEntry,
+  readFile: (src: string) => Promise<Uint8Array>,
+): Promise<Uint8Array> {
+  if (entry.src === undefined) return openPayload(bundle, entry);
+  if (entry.iv === undefined) throw new BundleError("payload-missing");
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: buffer(fromB64(entry.iv)) },
+    await aes(fromB64(entry.k)),
+    buffer(await readFile(entry.src)),
   );
   return new Uint8Array(plain);
 }

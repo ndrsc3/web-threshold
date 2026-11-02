@@ -18,19 +18,29 @@ export async function applyUnlock(detail, page) {
   page.tier.textContent = detail.tier;
 
   if (typeof data.theme === "string") page.root.dataset.theme = data.theme;
+  // A route leaves the page, so nothing else here needs to happen. Replays skip it, or a
+  // reload at the route's source would loop.
+  const route = safeRoute(data.route);
+  if (route && !detail.replayed) {
+    page.go(route);
+    return;
+  }
+
   // Each door starts clean: nothing from the last door carries over.
   page.message.textContent = typeof data.message === "string" ? data.message : "";
   page.reveal.textContent = "";
   page.reveal.hidden = true;
+  page.image(null);
   if (typeof data.sound === "string") page.sound(data.sound);
 
   for (const name of detail.names) {
     const blob = await detail.open(name);
+    if (blob.type.startsWith("image/")) {
+      page.image(blob);
+      continue;
+    }
     // textContent, never innerHTML: sealed text and data stay text.
     page.reveal.textContent = await blob.text();
     page.reveal.hidden = false;
   }
-
-  const route = safeRoute(data.route);
-  if (route && !detail.replayed) page.go(route);
 }

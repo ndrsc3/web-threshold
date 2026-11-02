@@ -78,6 +78,26 @@ async function runEngine(name, engine) {
     await enter(page, "σας περιμενω στο κατωφλι");
     await waitFor("#tier", "threshold");
 
+    await enter(page, "the moth came back");
+    await page.locator("#figure").waitFor({ state: "visible" });
+    const drawn = await page.locator("#figure").evaluate((image) => image.decode().then(() => image.naturalWidth));
+    if (drawn !== 32) throw new Error(`the sealed image didn't draw: width ${drawn}`);
+    if (!(await page.locator("#figure").getAttribute("src")).startsWith("blob:")) throw new Error("the image didn't come from a blob");
+
+    // A re-route, then a whole page behind its own door.
+    await enter(page, "the inner room waits");
+    await page.waitForURL("**/s/inner-room-7f3a9b/");
+    const shell = await (await page.request.get(page.url())).text();
+    if (shell.includes("existed nowhere") || shell.includes("The inner room")) throw new Error("the sealed page is in its shell");
+    await enter(page, "a wrong phrase here");
+    await enter(page, "THE INNER ROOM WAITS");
+    await page.locator("h1", { hasText: "The inner room" }).waitFor();
+    expectText(await text("#ran"), "Its own script ran", "sealed page script");
+    expectText(await page.title(), "The inner room", "sealed page title");
+    await page.reload();
+    await page.locator("web-threshold input").waitFor();
+    if (await page.locator("h1", { hasText: "The inner room" }).count()) throw new Error("a reload kept the sealed page open");
+
     await page.goto(`${base}/bench.html`);
     await page.locator("#go").click();
     await waitFor("#result", "Median");

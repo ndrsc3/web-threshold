@@ -6,8 +6,9 @@ import { join } from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 import { beforeEach, describe, expect, it } from "vitest";
 import { run } from "../cli/run.js";
-import { deriveKek, encrypt, fromB64, openPayload, openSlots, padRecord, randomBytes, toB64, type Bundle } from "../gate/sealed-format.js";
+import { deriveKek, encrypt, fromB64, openEntry, openPayload, openSlots, padRecord, randomBytes, toB64, type Bundle } from "../gate/sealed-format.js";
 import { BUNDLE_PATH, buildBundle, seal, verifyBundle, type DoorsFile } from "./index.js";
+import { HANDLER } from "./shell.js";
 
 const CANARY = "zorvex quillan mibbet"; // three tokens: aborts
 const STRONG = "the marble quietly unfolds at dusk";
@@ -295,8 +296,6 @@ describe("doors file refusals", () => {
     ["an unknown payload", () => ({ payloads: {}, doors: [{ tier: "a", phrase: STRONG, open: ["nope"] }] }), /unknown payload "nope"/],
     ["duplicates by case", () => ({ payloads: {}, doors: [{ tier: "a", phrase: "Same Phrase Here", open: [] }, { tier: "b", phrase: "same  phrase here", open: [] }] }), /door b: has the same phrase/],
     ["duplicates by accent only", () => ({ payloads: {}, doors: [{ tier: "a", phrase: "el año pasado aquí", open: [] }, { tier: "b", phrase: "el ano pasado aqui", open: [] }] }), /door b: has the same phrase/],
-    ["a page, until slice 2", () => ({ payloads: { p: { from: "x.html", type: "text/html", page: "s/x/index.html" } }, doors: [{ tier: "a", phrase: STRONG, open: ["p"] }] }), /"page" isn't available yet/],
-    ["a binary type, until slice 2", () => ({ payloads: { p: { from: "x.png", type: "image/png" } }, doors: [{ tier: "a", phrase: STRONG, open: ["p"] }] }), /binary type image\/png isn't available yet/],
     ["allowPublic that isn't strings", () => ({ ...basic(), allowPublic: [1] }), /allowPublic/],
   ];
 
@@ -345,12 +344,6 @@ describe("path refusals", () => {
   it("a missing source", async () => {
     write({ payloads: { n: { from: "nope.html", type: "text/html" } }, doors: [{ tier: "a", phrase: STRONG, open: ["n"] }] });
     expect(await go()).toBe(1);
-  });
-
-  it("text over 64 KiB, until slice 2", async () => {
-    write({ payloads: { n: { from: source("big.txt", "x ".repeat(33 * 1024)), type: "text/plain" } }, doors: [{ tier: "a", phrase: STRONG, open: ["n"] }] });
-    expect(await go()).toBe(1);
-    expect(report()).toContain("over 64 KiB");
   });
 
   it("a missing --out", async () => {
@@ -414,28 +407,28 @@ describe("read-back catches a bad sealer", () => {
   const contents = new Map([["a", new TextEncoder().encode("aaa")], ["b", new TextEncoder().encode("bbb")]]);
 
   it("passes a good bundle", async () => {
-    await expect(verifyBundle(await buildBundle(file, contents), file, contents)).resolves.toBeUndefined();
+    await expect(verifyBundle((await buildBundle(file, contents)).bundle, file, contents)).resolves.toBeUndefined();
   });
 
   it("a record holding an undeclared key", async () => {
     const wider: DoorsFile = { ...file, doors: [{ tier: "one", phrase: "first door phrase", open: ["a", "b"] }, file.doors[1]!] };
-    await expect(verifyBundle(await buildBundle(wider, contents), file, contents)).rejects.toThrow(/exactly its declared/);
+    await expect(verifyBundle((await buildBundle(wider, contents)).bundle, file, contents)).rejects.toThrow(/exactly its declared/);
   });
 
   it("different content", async () => {
     const other = new Map(contents).set("a", new TextEncoder().encode("xxx"));
-    await expect(verifyBundle(await buildBundle(file, other), file, contents)).rejects.toThrow(/byte-identical/);
+    await expect(verifyBundle((await buildBundle(file, other)).bundle, file, contents)).rejects.toThrow(/byte-identical/);
   });
 
   it("corrupted ciphertext", async () => {
-    const bundle = await buildBundle(file, contents);
+    const { bundle } = await buildBundle(file, contents);
     bundle.slots[0]!.ct = bundle.slots[0]!.ct.replace(/^./, (c) => (c === "A" ? "B" : "A"));
     await expect(verifyBundle(bundle, file, contents)).rejects.toThrow(/opened 0 slots/);
   });
 
   it("swapped tiers", async () => {
     const swapped: DoorsFile = { ...file, doors: [{ ...file.doors[0]!, tier: "two" }, { ...file.doors[1]!, tier: "one" }] };
-    await expect(verifyBundle(await buildBundle(swapped, contents), file, contents)).rejects.toThrow(/another door's record/);
+    await expect(verifyBundle((await buildBundle(swapped, contents)).bundle, file, contents)).rejects.toThrow(/another door's record/);
   });
 
   it("two payloads sharing a key", async () => {
@@ -455,7 +448,7 @@ describe("read-back catches a bad sealer", () => {
   });
 
   it("a slot that any phrase opens", async () => {
-    const bundle = await buildBundle(file, contents);
+    const { bundle } = await buildBundle(file, contents);
     const extra = await encrypt(await deriveKek("first door phrase", fromB64(bundle.kdf.salt), bundle.kdf.iter), padRecord({ tier: "one", open: {} }));
     bundle.slots.push(extra);
     await expect(verifyBundle(bundle, file, contents)).rejects.toThrow(/opened 2 slots/);
@@ -464,9 +457,9 @@ describe("read-back catches a bad sealer", () => {
   it("a real run stops on a bad sealer, writing nothing", async () => {
     write(basic());
     const broken = async (doors: DoorsFile, c: Map<string, Uint8Array>) => {
-      const bundle = await buildBundle(doors, c);
-      bundle.slots = [];
-      return bundle;
+      const built = await buildBundle(doors, c);
+      built.bundle.slots = [];
+      return built;
     };
     expect(await go({ build: broken })).toBe(1);
     expect(report()).toContain("read-back: door fox opened 0 slots");
@@ -476,8 +469,8 @@ describe("read-back catches a bad sealer", () => {
   it("a sealer writing plaintext is stopped, by read-back or by the scan", async () => {
     write(basic());
     const leaky = async (doors: DoorsFile, c: Map<string, Uint8Array>) => {
-      const bundle = await buildBundle(doors, c);
-      return { ...bundle, leak: new TextDecoder().decode(c.get("note")!) } as Bundle;
+      const built = await buildBundle(doors, c);
+      return { ...built, bundle: { ...built.bundle, leak: new TextDecoder().decode(c.get("note")!) } as Bundle };
     };
     expect(await go({ build: leaky })).toBe(1);
     expect(report()).toContain("text of payload note appears in");
@@ -503,7 +496,7 @@ describe("web-threshold seal", () => {
     expect(existsSync(join(out, BUNDLE_PATH))).toBe(true);
   });
 
-  it.each([[[]], [["--doors", "doors.json"]], [["--doors", "doors.json", "--out"]], [["--doors", "doors.json", "--out", "dist", "--phrase", "x"]], [["--doors", "doors.json", "--out", "dist", "--shell", "shell.html"]]])(
+  it.each([[[]], [["--doors", "doors.json"]], [["--doors", "doors.json", "--out"]], [["--doors", "doors.json", "--out", "dist", "--phrase", "x"]], [["--doors", "doors.json", "--out", "dist", "--shell"]]])(
     "refuses arguments %j",
     async (args) => {
       write(basic());
@@ -635,7 +628,7 @@ describe("real failures say what happened (g-7)", () => {
     write(basic());
     site({ s: "a file" });
     expect(await go()).toBe(1);
-    expect(report()).toMatch(/seal failed: (EEXIST|ENOTDIR)/);
+    expect(report()).toContain("is a file");
   });
 
   it("a from that's a directory is refused by name", async () => {
@@ -711,5 +704,451 @@ describe("phrases the token rule can't see (g-9)", () => {
     write(basic(phrase));
     site({ "a.html": `<p>彼は${phrase}と言った</p>` });
     expect(await go()).toBe(1);
+  });
+});
+
+describe("URL-loaded payloads", () => {
+  const PNG = Buffer.from("89504e470d0a1a0a", "hex");
+  const image = (size = 2000) => Buffer.concat([PNG, randomBytes(size)]);
+  const sealedFiles = () => execFileSync("ls", [join(out, "s")]).toString().split("\n").filter((name) => name.endsWith(".sealed"));
+  const readFromOut = async (src: string) => new Uint8Array(readFileSync(join(out, src)));
+  const openWith = async (phrase: string) => {
+    const bundle = written();
+    const [record] = await openSlots(bundle, await deriveKek(phrase, fromB64(bundle.kdf.salt), bundle.kdf.iter));
+    return { bundle, record: record! };
+  };
+
+  it("writes an image as pure ciphertext at a random name that opens with the phrase", async () => {
+    const bytes = image();
+    writeFileSync(join(dir, "moth.png"), bytes);
+    write({ payloads: { moth: { from: "moth.png", type: "image/png" } }, doors: [{ tier: "moth", phrase: STRONG, open: ["moth"] }] });
+    expect(await go()).toBe(0);
+    const [name] = sealedFiles();
+    expect(name).not.toContain("moth");
+    const file = readFileSync(join(out, "s", name!));
+    expect(file.includes(PNG)).toBe(false);
+    expect(file.length).toBe(bytes.length + 16); // the data and the tag, nothing else
+    const { bundle, record } = await openWith(STRONG);
+    const entry = record.open.moth!;
+    expect(entry.src).toBe(`/s/${name}`);
+    expect(Buffer.compare(Buffer.from(await openEntry(bundle, entry, readFromOut)), bytes)).toBe(0);
+  });
+
+  it("doesn't name the file anywhere public", async () => {
+    writeFileSync(join(dir, "moth.png"), image());
+    write({ payloads: { moth: { from: "moth.png", type: "image/png" } }, doors: [{ tier: "moth", phrase: STRONG, open: ["moth"] }] });
+    expect(await go()).toBe(0);
+    expect(readFileSync(join(out, BUNDLE_PATH), "utf8")).not.toContain(sealedFiles()[0]!);
+    expect(report()).not.toContain(sealedFiles()[0]!);
+  });
+
+  it("keeps text under 64 KiB inline, and moves longer text to a file", async () => {
+    write({
+      payloads: {
+        small: { from: source("small.txt", "little words here"), type: "text/plain" },
+        big: { from: source("big.txt", "lorem ".repeat(12_000)), type: "text/plain" },
+      },
+      doors: [{ tier: "a", phrase: STRONG, open: ["small", "big"] }],
+    });
+    expect(await go()).toBe(0);
+    expect(written().inline).toHaveLength(1);
+    expect(sealedFiles()).toHaveLength(1);
+  });
+
+  it("scans text it moved to a file", async () => {
+    const text = Array.from({ length: 12_000 }, (_, i) => `word${i}`).join(" ");
+    write({ payloads: { big: { from: source("big.txt", text), type: "text/plain" } }, doors: [{ tier: "a", phrase: STRONG, open: ["big"] }] });
+    site({ "a.html": `<p>${text.split(" ").slice(500, 516).join(" ")}</p>` });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("text of payload big appears in a.html");
+  });
+
+  it("finds a long leak in a very long text, which steps by whole windows", async () => {
+    const text = Array.from({ length: 30_000 }, (_, i) => `w${i}`).join(" ");
+    writeFileSync(join(dir, "long.txt"), text);
+    write({ payloads: { big: { from: "long.txt", type: "text/plain" } }, doors: [{ tier: "a", phrase: STRONG, open: ["big"] }] });
+    site({ "a.html": `<p>${text.split(" ").slice(1003, 1019).join(" ")}</p>` });
+    expect(await go()).toBe(1);
+  });
+
+  it("aborts on a public copy of an image", async () => {
+    const bytes = image();
+    writeFileSync(join(dir, "moth.png"), bytes);
+    write({ payloads: { moth: { from: "moth.png", type: "image/png" } }, doors: [{ tier: "a", phrase: STRONG, open: ["moth"] }] });
+    site({ "copy.webp": bytes });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("public copy of payload moth");
+  });
+
+  it("warns over 2 MiB and aborts over 10 MiB", async () => {
+    writeFileSync(join(dir, "m.bin"), Buffer.alloc(2 * 1024 * 1024 + 1, 1));
+    write({ payloads: { m: { from: "m.bin", type: "video/mp4" } }, doors: [{ tier: "a", phrase: STRONG, open: ["m"] }] });
+    expect(await go()).toBe(0);
+    expect(report()).toContain("over 2 MiB");
+
+    out = join(dir, "dist2");
+    mkdirSync(out);
+    writeFileSync(join(dir, "m.bin"), Buffer.alloc(10 * 1024 * 1024 + 1, 1));
+    expect(await go()).toBe(1);
+    expect(report()).toContain("over the 10 MiB limit");
+    expect(existsSync(join(out, "s"))).toBe(false);
+  });
+
+  it("refuses something that isn't a media type", async () => {
+    write({ payloads: { a: { from: "x", type: "not a type" } }, doors: [{ tier: "a", phrase: STRONG, open: ["a"] }] });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("isn't a media type");
+  });
+
+  it("read-back catches a file that was never written", async () => {
+    writeFileSync(join(dir, "moth.png"), image());
+    write({ payloads: { moth: { from: "moth.png", type: "image/png" } }, doors: [{ tier: "a", phrase: STRONG, open: ["moth"] }] });
+    const dropped = async (doors: DoorsFile, c: Map<string, Uint8Array>) => ({ ...(await buildBundle(doors, c)), files: new Map() });
+    expect(await go({ build: dropped })).toBe(1);
+    expect(report()).toContain("wasn't written");
+    expect(existsSync(join(out, BUNDLE_PATH))).toBe(false);
+  });
+
+  it("read-back catches altered ciphertext in a file", async () => {
+    writeFileSync(join(dir, "moth.png"), image());
+    write({ payloads: { moth: { from: "moth.png", type: "image/png" } }, doors: [{ tier: "a", phrase: STRONG, open: ["moth"] }] });
+    const altered = async (doors: DoorsFile, c: Map<string, Uint8Array>) => {
+      const built = await buildBundle(doors, c);
+      for (const bytes of built.files.values()) bytes[0]! ^= 1;
+      return built;
+    };
+    expect(await go({ build: altered })).toBe(1);
+  });
+});
+
+describe("sealed pages", () => {
+  const ELEMENT = `class Fake {} /* element code with its own </script> words about form and label */`;
+  const secret = "<h1>The inner room</h1><p>Only a door brings you to this quiet place behind the wall.</p>";
+  const doors = (page = "s/room-7f3a9b/index.html") => ({
+    payloads: { room: { from: source("room.html", secret), type: "text/html", page } },
+    doors: [{ tier: "keeper", phrase: STRONG, open: ["room"] }],
+  });
+  const seal2 = (extra: object = {}) => go({ element: ELEMENT, ...extra });
+  const shellPath = () => join(out, "s/room-7f3a9b/index.html");
+
+  it("writes a shell holding the door, and not the page", async () => {
+    write(doors());
+    expect(await seal2()).toBe(0);
+    const html = readFileSync(shellPath(), "utf8");
+    expect(html).toContain('<web-threshold sealed="/s/site.json" data-open="room"');
+    expect(html).not.toContain('"slots"');
+    expect(html).not.toContain("inner room");
+    expect(html).not.toContain("quiet place");
+    expect(report()).toContain("1 pages");
+  });
+
+  it("the site bundle opens the page", async () => {
+    write(doors());
+    await seal2();
+    const bundle = written();
+    const [record] = await openSlots(bundle, await deriveKek(STRONG, fromB64(bundle.kdf.salt), bundle.kdf.iter));
+    expect(new TextDecoder().decode(await openPayload(bundle, record!.open.room!))).toBe(secret);
+  });
+
+  it("stays small however many pages there are", async () => {
+    const payloads: Record<string, object> = {};
+    const list = Array.from({ length: 8 }, (_, i) => `p${i}`);
+    for (const name of list) payloads[name] = { from: source(`${name}.html`, `<p>page ${name} ${"lorem ipsum ".repeat(2000)}</p>`), type: "text/html", page: `s/${name}/index.html` };
+    write({ payloads, doors: [{ tier: "k", phrase: STRONG, open: list }], allowPublic: [] });
+    expect(await seal2()).toBe(0);
+    expect(readFileSync(join(out, "s/p0/index.html")).length).toBeLessThan(5000);
+  });
+
+  it("inlines the element so its text can't close the script", async () => {
+    write(doors());
+    await seal2();
+    const html = readFileSync(shellPath(), "utf8");
+    expect(html).toContain("class Fake");
+    expect(html).toContain("its own <\\/script> words");
+  });
+
+  it("doesn't count the element's own words as a leak", async () => {
+    write({ ...doors(), doors: [{ tier: "keeper", phrase: "its own words about form", open: ["room"] }] });
+    expect(await seal2({ element: "/* its own words about form */" })).toBe(0);
+  });
+
+  it("still scans the shell: a template holding a secret aborts", async () => {
+    write(doors());
+    writeFileSync(join(dir, "shell.html"), `<p>${STRONG}</p><!--web-threshold-->`);
+    expect(await seal2({ shell: join(dir, "shell.html") })).toBe(1);
+    expect(report()).toContain("the phrase of door keeper appears in s/room-7f3a9b/index.html");
+    expect(existsSync(shellPath())).toBe(false);
+  });
+
+  it("uses a custom shell", async () => {
+    write(doors());
+    writeFileSync(join(dir, "shell.html"), `<html><title>Mine</title><!--web-threshold--></html>`);
+    expect(await seal2({ shell: join(dir, "shell.html") })).toBe(0);
+    expect(readFileSync(shellPath(), "utf8")).toContain("<title>Mine</title>");
+  });
+
+  it.each(["<html></html>", "<!--web-threshold--><!--web-threshold-->"])("refuses a shell without exactly one marker: %s", async (template) => {
+    write(doors());
+    writeFileSync(join(dir, "shell.html"), template);
+    expect(await seal2({ shell: join(dir, "shell.html") })).toBe(1);
+    expect(report()).toContain("exactly once");
+  });
+
+  it("aborts when a public page links to the sealed path", async () => {
+    write(doors("s/room-with-a-long-name-7f3a9b/index.html"));
+    site({ "a.html": '<a href="/s/room-with-a-long-name-7f3a9b/">in</a>' });
+    expect(await seal2()).toBe(1);
+    expect(report()).toContain("the path of payload room appears in a.html");
+  });
+
+  it("refuses to replace a real file", async () => {
+    write(doors());
+    site({ "s/room-7f3a9b/index.html": "<p>already here</p>" });
+    expect(await seal2()).toBe(1);
+    expect(report()).toContain("already in --out");
+    expect(readFileSync(shellPath(), "utf8")).toBe("<p>already here</p>");
+  });
+
+  it("a sealed page may share a stylesheet and scripts with the public site", async () => {
+    const css = "body { font-family: Georgia, Times New Roman, serif; max-width: 34rem; margin: 0 auto; padding: 3rem 1rem; }";
+    const js = "function shared(one, two, three, four, five, six, seven, eight) { return one + two; }";
+    const page = `<html><style>${css}</style><script>${js}</script><body>${secret}</body></html>`;
+    write({ payloads: { room: { from: source("r.html", page), type: "text/html", page: "s/room-7f3a9b/index.html" } }, doors: [{ tier: "keeper", phrase: STRONG, open: ["room"] }] });
+    site({ "a.html": `<style>${css}</style><script>${js}</script><p>public</p>` });
+    expect(await seal2()).toBe(0);
+  });
+
+  it("the page's words still abort, around its style block", async () => {
+    const page = `<html><style>a { color: red }</style><body>${secret}</body></html>`;
+    write({ payloads: { room: { from: source("r.html", page), type: "text/html", page: "s/room-7f3a9b/index.html" } }, doors: [{ tier: "keeper", phrase: STRONG, open: ["room"] }] });
+    site({ "a.html": "<p>Only a door brings you to this quiet place</p>" });
+    expect(await seal2()).toBe(1);
+  });
+
+  it("a style with no end doesn't hide the rest of a page's text, or hang", async () => {
+    const page = `<html><style>${"a{}".repeat(2_000)}${secret}`;
+    write({ payloads: { room: { from: source("r.html", page), type: "text/html", page: "s/room-7f3a9b/index.html" } }, doors: [{ tier: "keeper", phrase: STRONG, open: ["room"] }] });
+    site({ "a.html": "<p>Only a door brings you to this quiet place</p>" });
+    expect(await seal2()).toBe(1);
+  });
+
+  it("names a dead-end page", async () => {
+    write({ payloads: { room: { from: source("r.html", secret), type: "text/html", page: "s/r/index.html" } }, doors: [{ tier: "k", phrase: STRONG, open: [] }] });
+    expect(await seal2()).toBe(1);
+    expect(report()).toContain("no door opens this page");
+  });
+
+  it("refuses two pages differing only by case", async () => {
+    write({
+      payloads: {
+        a: { from: source("a.html", "a"), type: "text/html", page: "room/index.html" },
+        b: { from: source("b.html", "b"), type: "text/html", page: "Room/index.html" },
+      },
+      doors: [{ tier: "t", phrase: STRONG, open: ["a", "b"] }],
+    });
+    expect(await seal2()).toBe(1);
+    expect(report()).toContain("another payload already uses that page");
+  });
+
+  it("refuses a page whose folder is a file, before writing anything", async () => {
+    write(doors("about.html/x.html"));
+    site({ "about.html": "<p>about</p>" });
+    expect(await seal2()).toBe(1);
+    expect(report()).toContain("is a file");
+    expect(existsSync(join(out, "s"))).toBe(false);
+  });
+
+  it("targets the full address of a page that isn't an index", async () => {
+    write(doors("rooms/secret-vault-long-name-7f3a9b.html"));
+    site({ "a.html": '<a href="/rooms/secret-vault-long-name-7f3a9b.html">in</a>' });
+    expect(await seal2()).toBe(1);
+    expect(report()).toContain("the path of payload room appears in a.html");
+  });
+
+  it("doesn't warn on a common folder word", async () => {
+    write(doors("rooms/secret-vault-7f3a9b.html"));
+    site({ "a.html": "<p>we have many rooms</p>" });
+    expect(await seal2()).toBe(0);
+    expect(report()).not.toContain("the path of payload");
+  });
+
+  it.each(["/s/room-with-a-long-name-7f3a9b/", "s/room-with-a-long-name-7f3a9b/index.html", "s/room-with-a-long-name-7f3a9b"])("allowPublic takes the address as %s", async (spelling) => {
+    write({ ...doors("s/room-with-a-long-name-7f3a9b/index.html"), allowPublic: [spelling] });
+    site({ "a.html": '<a href="/s/room-with-a-long-name-7f3a9b/">in</a>' });
+    expect(await seal2()).toBe(0);
+    expect(report()).toContain("allowed public: the path of payload room");
+  });
+
+  it("allowPublic takes a whole footer, longer than a window", async () => {
+    const footer = "made with care in the high desert by people who love this place and everyone in it";
+    const page = `<p>${secret}</p><footer>${footer}</footer>`;
+    write({ payloads: { room: { from: source("r.html", page), type: "text/html", page: "s/r/index.html" } }, doors: [{ tier: "k", phrase: STRONG, open: ["room"] }], allowPublic: [footer] });
+    site({ "a.html": `<footer>${footer}</footer>` });
+    expect(await seal2()).toBe(0);
+  });
+
+  it("refuses without a built element", async () => {
+    write(doors());
+    expect(await go()).toBe(1);
+    expect(report()).toContain("need the built element");
+  });
+
+  const badPages: [string, unknown][] = [
+    ["an absolute path", "/etc/index.html"],
+    ["a path climbing out", "../../index.html"],
+    ["a hidden climb", "s/../../index.html"],
+    ["a backslash", "s\\..\\index.html"],
+    ["no .html", "s/room/"],
+    ["not a string", 3],
+  ];
+  it.each(badPages)("refuses %s", async (_label, page) => {
+    write(doors(page as string));
+    expect(await seal2()).toBe(1);
+    expect(report()).toContain('"page" must be a relative path');
+  });
+
+  it("refuses two payloads on one page, and a page that isn't HTML", async () => {
+    write({
+      payloads: {
+        a: { from: source("a.html", "a"), type: "text/html", page: "s/p/index.html" },
+        b: { from: source("b.html", "b"), type: "text/plain", page: "s/p/index.html" },
+      },
+      doors: [{ tier: "t", phrase: STRONG, open: ["a", "b"] }],
+    });
+    expect(await seal2()).toBe(1);
+    expect(report()).toContain("another payload already uses that page");
+    expect(report()).toContain("a page must be text/html");
+  });
+});
+
+describe("writes stay inside --out (h-1)", () => {
+  const room = () => ({ from: source("r.html", "<p>some sealed page words here</p>"), type: "text/html" });
+
+  it("refuses a page through a symlinked folder", async () => {
+    const elsewhere = join(dir, "elsewhere");
+    mkdirSync(elsewhere);
+    symlinkSync(elsewhere, join(out, "rooms"));
+    write({ payloads: { room: { ...room(), page: "rooms/x/index.html" } }, doors: [{ tier: "k", phrase: STRONG, open: ["room"] }] });
+    expect(await go({ element: "/* e */" })).toBe(1);
+    expect(report()).toContain("outside --out");
+    expect(execFileSync("ls", ["-A", elsewhere]).toString()).toBe("");
+  });
+
+  it("refuses an s that's a symlink out", async () => {
+    const elsewhere = join(dir, "elsewhere");
+    mkdirSync(elsewhere);
+    symlinkSync(elsewhere, join(out, "s"));
+    write(basic());
+    expect(await go()).toBe(1);
+    expect(report()).toContain("outside --out");
+    expect(execFileSync("ls", ["-A", elsewhere]).toString()).toBe("");
+  });
+
+  it("allows a symlink that stays inside", async () => {
+    mkdirSync(join(out, "real"));
+    symlinkSync(join(out, "real"), join(out, "rooms"));
+    write({ payloads: { room: { ...room(), page: "rooms/x/index.html" } }, doors: [{ tier: "k", phrase: STRONG, open: ["room"] }] });
+    expect(await go({ element: "/* e */" })).toBe(0);
+    expect(existsSync(join(out, "real/x/index.html"))).toBe(true);
+  });
+
+  it("read-back refuses a sealed file with a bad path", async () => {
+    writeFileSync(join(dir, "m.png"), randomBytes(100));
+    write({ payloads: { m: { from: "m.png", type: "image/png" } }, doors: [{ tier: "k", phrase: STRONG, open: ["m"] }] });
+    const escaping = async (doors: DoorsFile, c: Map<string, Uint8Array>) => {
+      const built = await buildBundle(doors, c);
+      built.files.set("../escaped.sealed", new Uint8Array(1));
+      return built;
+    };
+    expect(await go({ build: escaping })).toBe(1);
+    expect(report()).toContain("unexpected path");
+    expect(existsSync(join(dir, "escaped.sealed"))).toBe(false);
+  });
+
+  it("read-back refuses a sealed file no door opens", async () => {
+    writeFileSync(join(dir, "m.png"), randomBytes(100));
+    write({ payloads: { m: { from: "m.png", type: "image/png" } }, doors: [{ tier: "k", phrase: STRONG, open: ["m"] }] });
+    const extra = async (doors: DoorsFile, c: Map<string, Uint8Array>) => {
+      const built = await buildBundle(doors, c);
+      built.files.set("s/extra.sealed", new TextEncoder().encode("plain secret text"));
+      return built;
+    };
+    expect(await go({ build: extra })).toBe(1);
+    expect(report()).toContain("no door opens");
+  });
+});
+
+describe("payload text the scan must keep (h-2, h-6, h-10)", () => {
+  const WORDS = "forty quiet words about a hidden garden that nobody has been told about yet at all";
+  const payload = (text: string, type = "text/html") => ({ payloads: { n: { from: source("n.txt", text), type } }, doors: [{ tier: "k", phrase: STRONG, open: ["n"] }] });
+
+  it.each([
+    ["a custom element starting with style", `<styled-note>${WORDS}</styled-note><style>b{}</style>`],
+    ["a custom element starting with script", `<scripture-note>${WORDS}</scripture-note><script>x</script>`],
+    ["a JSON data block", `<script type="application/json">${JSON.stringify({ t: WORDS })}</script>`],
+    ["an alt", `<img alt="${WORDS}" src="x.png">`],
+    ["a meta description", `<meta name="description" content="${WORDS}">`],
+  ])("%s", async (_label, text) => {
+    write(payload(text));
+    site({ "a.html": `<p>${WORDS}</p>` });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("text of payload n appears in a.html");
+  });
+
+  it("plain text with < and > isn't read as tags", async () => {
+    write(payload(`if a < b then ${WORDS} and c > d`, "text/plain"));
+    site({ "a.html": `<p>${WORDS}</p>` });
+    expect(await go()).toBe(1);
+  });
+
+  it.each(["TEXT/HTML", "application/xhtml+xml", "text/csv", "application/ld+json"])("scans a %s payload", async (type) => {
+    write(payload(`<div>${WORDS}</div>`, type));
+    site({ "a.html": `<p>${WORDS}</p>` });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("text of payload n appears in a.html");
+  });
+
+  it("warns when text isn't UTF-8", async () => {
+    writeFileSync(join(dir, "latin.txt"), Buffer.from([0x63, 0x61, 0x66, 0xe9]));
+    write({ payloads: { n: { from: "latin.txt", type: "text/plain" } }, doors: [{ tier: "k", phrase: STRONG, open: ["n"] }] });
+    expect(await go()).toBe(0);
+    expect(report()).toContain("isn't valid UTF-8");
+  });
+});
+
+describe("the shell's handler (h-7)", () => {
+  async function runHandler(open: () => Promise<Blob>) {
+    let writes = 0;
+    let listener!: (e: { detail: object }) => Promise<void>;
+    const gate = { dataset: { open: "room" }, addEventListener: (_: string, l: typeof listener) => (listener = l) };
+    const document = { querySelector: () => gate, open() {}, write: () => writes++, close() {} };
+    new Function("document", HANDLER)(document);
+    const detail = { names: ["room"], open };
+    return { fire: () => listener({ detail }), writes: () => writes };
+  }
+
+  it("writes once, however many times the door opens", async () => {
+    let finish!: (b: Blob) => void;
+    const slow = new Promise<Blob>((done) => (finish = done));
+    const h = await runHandler(() => slow);
+    const first = h.fire();
+    const second = h.fire();
+    finish(new Blob(["<p>x</p>"]));
+    await Promise.all([first, second]);
+    await h.fire();
+    expect(h.writes()).toBe(1);
+  });
+
+  it("can try again after a failed open", async () => {
+    let fail = true;
+    const h = await runHandler(async () => {
+      if (fail) throw new Error("no");
+      return new Blob(["<p>x</p>"]);
+    });
+    await h.fire();
+    expect(h.writes()).toBe(0);
+    fail = false;
+    await h.fire();
+    expect(h.writes()).toBe(1);
   });
 });

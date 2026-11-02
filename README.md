@@ -97,9 +97,23 @@ This writes `dist/s/site.json`, proves each phrase opens exactly its own payload
 - The door count is public: it's the length of an array.
 - A script on the page can see phrases and opened content, so sealed pages shouldn't load third-party scripts. Self-host this element there rather than using the CDN. `seal` warns if it sees an external script beside a sealed gate.
 - Set `sealed` before the element connects. Setting it later emits `threshold-error`.
-- Not yet: images and other binary files, whole gated pages, remembering unlocks across pages. Text payloads are capped at 64 KiB.
+- Files are capped at 10 MiB, with a warning over 2 MiB, because a phone holds them twice in memory while opening them. Sealed files use root-relative paths, so deploy at a domain's root. A resized copy of a sealed image in your public files isn't detected.
+- The build check skips the bodies of `<style>` and executable `<script>` in sealed pages, which usually match the public site's, so it won't notice a secret written in them leaking elsewhere. Boilerplate of 8+ words in a sealed page's visible text or long attributes, such as a shared footer, stops the build until you list it in `allowPublic`.
+- A sealed page with an import map fails in Firefox, because the shell's own module already ran. Sealed pages should use ordinary script URLs.
+- A sealed page's address, and its payload name, are public. Only the content is protected, and a phrase can't be revoked once a copy of the bundle is out.
+- Not yet: remembering unlocks across pages, so a re-route to a sealed page asks for its phrase there.
 
-To try it: `npm run build && npm run demo`, then open `http://localhost:4173`.
+**Images and files.** Any payload with a non-text type, or text over 64 KiB, becomes a pure-ciphertext file at a random name, listed only inside the doors that open it. `detail.open(name)` fetches it on request and returns a `Blob`, so an image is `img.src = URL.createObjectURL(blob)`.
+
+**Whole pages.** Give an HTML payload a `page`, and `seal` writes a small public shell at that path. The shell holds the door, and the right phrase replaces the document with your page, whose own scripts and styles then run.
+
+```json
+{ "from": "private/room.html", "type": "text/html", "page": "s/room-7f3a9b/index.html" }
+```
+
+`--shell shell.html` uses your own template for the shell, which must contain `<!--web-threshold-->` exactly once. The shell fetches `/s/site.json`, so every page in a site shares one bundle. Reloading shows the door again. Keep the path random, and don't link to it from public pages, unless you list it in `allowPublic`.
+
+To try it: `npm run build && npm run demo`, then open `http://localhost:4173`. `npm run test:browsers` runs the demo in Chromium, WebKit and Firefox.
 
 ## Visitor policy: robots.txt from one config
 

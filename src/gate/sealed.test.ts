@@ -253,6 +253,78 @@ describe("faults: threshold-error, no unlock, never tier-rejected", () => {
   });
 });
 
+describe("URL-loaded payloads", () => {
+  async function urlBundle(src: string) {
+    const key = randomBytes(32);
+    const plain = encode("from a file");
+    const sealed = await encrypt(key, plain);
+    const salt = randomBytes(16);
+    const open = { pic: { k: toB64(key), type: "image/png", iv: sealed.iv, src } };
+    const slots = [await encrypt(await deriveKek("fox", salt, ITER), padRecord({ tier: "fox", open }))];
+    const bundle: Bundle = { v: 1, kdf: { iter: ITER, salt: toB64(salt), norm: "fold1" }, slots, inline: [] };
+    return { bundle, cipher: fromB64(sealed.ct) };
+  }
+  afterEach(() => vi.restoreAllMocks());
+
+  it("fetches and opens on request, with the record's type", async () => {
+    const { bundle, cipher } = await urlBundle("/s/x.sealed");
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(cipher as BodyInit));
+    const { el, events } = mount(bundle);
+    type(el, "fox");
+    await settle(el);
+    expect(fetchSpy).not.toHaveBeenCalled(); // lazy
+    const blob = (await events[0]!.detail.open("pic")) as Blob;
+    expect(blob.type).toBe("image/png");
+    expect(await blob.text()).toBe("from a file");
+  });
+
+  it("a failed fetch rejects and emits threshold-error, never tier-rejected", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { bundle } = await urlBundle("/s/x.sealed");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("", { status: 404 }));
+    const { el, events } = mount(bundle, { "report-wrong": "" });
+    type(el, "fox");
+    await settle(el);
+    await expect(events[0]!.detail.open("pic")).rejects.toThrow();
+    expect(events.map((e) => e.detail?.code ?? e.type)).toEqual(["tier-unlocked", "fetch-failed"]);
+  });
+
+  it("refuses a cross-origin file", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { bundle } = await urlBundle("https://elsewhere.example/x.sealed");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const { el, events } = mount(bundle);
+    type(el, "fox");
+    await settle(el);
+    await expect(events[0]!.detail.open("pic")).rejects.toThrow();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("an entry with a file but no IV rejects, without fetching", async () => {
+    const key = randomBytes(32);
+    const salt = randomBytes(16);
+    const open = { pic: { k: toB64(key), type: "image/png", src: "/s/x.sealed" } };
+    const slots = [await encrypt(await deriveKek("fox", salt, ITER), padRecord({ tier: "fox", open }))];
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const { el, events } = mount({ v: 1, kdf: { iter: ITER, salt: toB64(salt), norm: "fold1" }, slots, inline: [] });
+    type(el, "fox");
+    await settle(el);
+    await expect(events[0]!.detail.open("pic")).rejects.toThrow("payload-missing");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("a host's fallback page instead of the file is a fault", async () => {
+    const { bundle } = await urlBundle("/s/x.sealed");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("<html>fallback</html>"));
+    const { el, events } = mount(bundle, { "report-wrong": "" });
+    type(el, "fox");
+    await settle(el);
+    await expect(events[0]!.detail.open("pic")).rejects.toThrow();
+    expect(events.map((e) => e.detail?.code ?? e.type)).toEqual(["tier-unlocked", "payload-unreadable"]);
+  });
+});
+
 describe("fold1", () => {
   const same: [string, string][] = [
     ["The  Fox\n", "the fox"],

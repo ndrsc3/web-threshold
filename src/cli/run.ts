@@ -6,7 +6,7 @@ import { seal } from "../seal/index.js";
 
 const CONFIG = "threshold.config.ts";
 const OUT = join("public", "robots.txt");
-const USAGE = "usage: web-threshold robots\n       web-threshold seal --doors <file> --out <dir> [--public-fixture]";
+const USAGE = "usage: web-threshold robots\n       web-threshold seal --doors <file> --out <dir> [--shell <file>] [--public-fixture]";
 
 /** Why Node couldn't load a `.ts` config, in words a site owner can act on. */
 function loadFailure(err: unknown): string {
@@ -64,6 +64,7 @@ async function robots(cwd: string, log: (line: string) => void): Promise<number>
 interface SealArgs {
   doors: string;
   out: string;
+  shell?: string;
   publicFixture: boolean;
 }
 
@@ -73,13 +74,19 @@ function sealArgs(args: string[]): SealArgs | null {
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (arg === "--public-fixture") parsed.publicFixture = true;
-    else if (arg === "--doors" || arg === "--out") {
+    else if (arg === "--doors" || arg === "--out" || arg === "--shell") {
       const value = args[++index];
       if (value === undefined) return null;
-      parsed[arg.slice(2) as "doors" | "out"] = value;
+      parsed[arg.slice(2) as "doors" | "out" | "shell"] = value;
     } else return null;
   }
   return parsed.doors && parsed.out ? (parsed as SealArgs) : null;
+}
+
+/** The built element, beside this file in dist/, which shells inline. */
+function builtElement(): string | undefined {
+  const url = new URL("./web-threshold-sealed.js", import.meta.url);
+  return url.protocol === "file:" && existsSync(url) ? readFileSync(url, "utf8") : undefined;
 }
 
 function runSeal(options: SealArgs, cwd: string, log: (line: string) => void): Promise<number> {
@@ -88,6 +95,8 @@ function runSeal(options: SealArgs, cwd: string, log: (line: string) => void): P
     out: resolve(cwd, options.out),
     publicFixture: options.publicFixture,
     log,
+    ...(options.shell ? { shell: resolve(cwd, options.shell) } : {}),
+    ...(builtElement() ? { element: builtElement()! } : {}),
   });
 }
 

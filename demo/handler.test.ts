@@ -6,6 +6,7 @@ function page() {
   document.body.innerHTML = '<b id="t"></b><p id="m"></p><pre id="r" hidden></pre>';
   const went: string[] = [];
   const sounds: string[] = [];
+  const images: (Blob | null)[] = [];
   return {
     went,
     sounds,
@@ -14,6 +15,8 @@ function page() {
     message: document.getElementById("m")!,
     reveal: document.getElementById("r")!,
     sound: (name: string) => sounds.push(name),
+    images,
+    image: (blob: Blob | null) => images.push(blob),
     go: (url: string) => went.push(url),
   };
 }
@@ -58,6 +61,23 @@ describe("demo handler", () => {
     expect(p.message.textContent).toBe("");
     expect(p.reveal.textContent).toBe("");
     expect(p.reveal.hidden).toBe(true);
+  });
+
+  it("shows an image through page.image, and clears it for the next door", async () => {
+    const p = page();
+    const picture = new Blob(["x"], { type: "image/png" });
+    await applyUnlock(detail({ names: ["moth"], open: async () => picture }), p);
+    expect(p.images).toEqual([null, picture]);
+    expect(p.reveal.hidden).toBe(true);
+    await applyUnlock(detail({}), p);
+    expect(p.images.at(-1)).toBeNull();
+  });
+
+  it("routes without opening anything", async () => {
+    const p = page();
+    let opened = false;
+    await applyUnlock(detail({ names: ["n"], data: { route: "/inner/" }, open: async () => ((opened = true), new Blob(["x"])) }), p);
+    expect(opened).toBe(false);
   });
 
   it("reads a key the site invented", async () => {

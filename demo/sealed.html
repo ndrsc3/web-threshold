@@ -24,11 +24,13 @@
       #reveal { white-space: pre-wrap; border-left: 2px solid var(--accent); padding-left: 1em; font: inherit; }
       #wrong { min-height: 1.5em; font-style: italic; }
       code { overflow-wrap: anywhere; }
+      #figure { display: block; width: 100%; max-width: 16rem; height: auto; image-rendering: pixelated; }
+      #figure[hidden] { display: none; }
     </style>
   </head>
   <body>
     <h1>The Threshold, sealed</h1>
-    <p>Each phrase opens something different, and what it opens isn't in this page's source. Try <code>the fox was here</code>, <code>the kiln is still warm</code> or <code>σας περιμένω στο κατώφλι</code>.</p>
+    <p>Each phrase opens something different, and what it opens isn't in this page's source. Try <code>the fox was here</code>, <code>the kiln is still warm</code>, <code>σας περιμένω στο κατώφλι</code>, <code>the moth came back</code> or <code>the inner room waits</code>.</p>
 
     <web-threshold sealed="/s/site.json" report-wrong label="Speak the phrase" button="Enter" placeholder="…"></web-threshold>
 
@@ -36,6 +38,7 @@
     <p>opened: <strong id="tier">nothing yet</strong></p>
     <p id="message"></p>
     <pre id="reveal" hidden></pre>
+    <img id="figure" alt="A moth, opened from a sealed file" hidden />
 
     <script type="module">
       import "/web-threshold-sealed.js";
@@ -49,6 +52,13 @@
         message: document.getElementById("message"),
         reveal: document.getElementById("reveal"),
         go: (url) => location.assign(url),
+        image: (blob) => {
+          const figure = document.getElementById("figure");
+          if (figure.src) URL.revokeObjectURL(figure.src);
+          figure.hidden = !blob;
+          if (blob) figure.src = URL.createObjectURL(blob);
+          else figure.removeAttribute("src");
+        },
         sound: () => {
           const audio = new AudioContext();
           const tone = audio.createOscillator();

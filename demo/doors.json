@@ -11,6 +11,15 @@
     "threshold": {
       "from": "notes/threshold.txt",
       "type": "text/plain"
+    },
+    "moth": {
+      "from": "notes/moth.png",
+      "type": "image/png"
+    },
+    "inner": {
+      "from": "notes/inner.html",
+      "type": "text/html",
+      "page": "s/inner-room-7f3a9b/index.html"
     }
   },
   "doors": [
@@ -45,6 +54,26 @@
       "data": {
         "theme": "dusk",
         "message": "Καλώς ήρθατε."
+      }
+    },
+    {
+      "tier": "moth",
+      "phrase": "the moth came back",
+      "open": [
+        "moth"
+      ],
+      "data": {
+        "message": "It was drawn to the light."
+      }
+    },
+    {
+      "tier": "keeper",
+      "phrase": "the inner room waits",
+      "open": [
+        "inner"
+      ],
+      "data": {
+        "route": "/s/inner-room-7f3a9b/"
       }
     },
     {
@@ -341,21 +370,13 @@
       "tier": "filler-62",
       "phrase": "filler door number 62 opens nothing",
       "open": []
-    },
-    {
-      "tier": "filler-63",
-      "phrase": "filler door number 63 opens nothing",
-      "open": []
-    },
-    {
-      "tier": "filler-64",
-      "phrase": "filler door number 64 opens nothing",
-      "open": []
     }
   ],
   "allowPublic": [
     "the fox was here",
     "the kiln is still warm",
-    "σας περιμένω στο κατώφλι"
+    "σας περιμένω στο κατώφλι",
+    "the moth came back",
+    "the inner room waits"
   ]
 }

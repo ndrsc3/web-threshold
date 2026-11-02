@@ -22,6 +22,10 @@ export interface Target {
   /** How the report names it. Never the secret itself. */
   label: string;
   text: string;
+  /** A page's address: any spelling of it in allowPublic covers it. */
+  path?: boolean;
+  /** Payloads: HTML-like text, whose tags and code aren't the text. */
+  markup?: boolean;
 }
 
 export interface ScanInput {
@@ -59,6 +63,39 @@ function stripTags(text: string, gap: string): string {
     at = close + 1;
   }
   return out + text.slice(at);
+}
+
+/**
+ * A sealed page shares its stylesheet and scripts with the public site, and those would abort
+ * every build, so a payload's style and executable script bodies aren't targets. A data block
+ * (`<script type="application/json">`) is content, so it stays. Linear, like stripTags.
+ */
+function withoutCode(text: string): string {
+  const lower = text.toLowerCase();
+  const opening = /<(script|style)(?=[\s>])/g;
+  let out = "";
+  let at = 0;
+  for (let match = opening.exec(lower); match; match = opening.exec(lower)) {
+    const tagEnd = lower.indexOf(">", match.index);
+    if (tagEnd === -1) break;
+    if (match[1] === "script") {
+      const type = /\btype\s*=\s*["']?([^"'\s>]+)/.exec(lower.slice(match.index, tagEnd))?.[1];
+      if (type && type !== "module" && !type.includes("javascript")) continue;
+    }
+    const end = lower.indexOf(`</${match[1]}`, tagEnd);
+    if (end === -1) break;
+    out += `${text.slice(at, match.index)} `;
+    const close = lower.indexOf(">", end);
+    at = close === -1 ? text.length : close + 1;
+    opening.lastIndex = at;
+  }
+  return out + text.slice(at);
+}
+
+/** Long attribute values are content too: a description, or a caption in `alt`. Short ones are mostly furniture. */
+function attributeTexts(text: string): string[] {
+  const values = text.matchAll(/\b(?:alt|title|content|aria-label|placeholder|value)\s*=\s*(?:"([^"]{1,5000})"|'([^']{1,5000})')/gi);
+  return [...values].map((match) => match[1] ?? match[2] ?? "").filter((value) => tokensOf(fold1(value)).length >= RUN);
 }
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
@@ -112,21 +149,35 @@ function viewsOf(text: string): View[] {
   return bases.flatMap((base) => [new View(base), new View(stripTags(base, "")), new View(stripTags(base, " "))]);
 }
 
-function runsOf(text: string): string[][] {
-  const tokens = tokensOf(fold1(stripTags(text, " ")));
+function windows(tokens: string[]): string[][] {
   if (tokens.length <= RUN) return tokens.length > 0 ? [tokens] : [];
-  return tokens.slice(0, tokens.length - RUN + 1).map((_, index) => tokens.slice(index, index + RUN));
+  // A very long text steps by whole windows: any leak of twice the window still hits one.
+  const step = tokens.length > 20_000 ? RUN : 1;
+  const runs: string[][] = [];
+  for (let index = 0; index + RUN <= tokens.length; index += step) runs.push(tokens.slice(index, index + RUN));
+  return runs;
+}
+
+function runsOf(text: string, markup: boolean): string[][] {
+  if (!markup) return windows(tokensOf(fold1(text)));
+  return [
+    ...windows(tokensOf(fold1(stripTags(withoutCode(text), " ")))),
+    ...attributeTexts(text).flatMap((value) => windows(tokensOf(fold1(value)))),
+  ];
 }
 
 /** One rule: a hit of 3+ tokens or 16+ characters aborts; a shorter hit warns. */
 export function scan(input: ScanInput): ScanResult {
   const result: ScanResult = { aborts: [], warns: [], allowed: [], counts: { text: 0, compressed: 0, binary: 0 } };
   const allow = new Set(input.allowPublic.map(fold1));
-  const allowedTokens = new Set(input.allowPublic.map((item) => tokensOf(fold1(item)).join(" ")));
+  const allowedTokens = input.allowPublic.map((item) => tokensOf(fold1(item)).join(" ")).filter(Boolean);
+  // A run is covered if it sits anywhere inside an allowed entry, such as a whole footer.
+  const runAllowed = (run: string[]) => allowedTokens.some((entry) => ` ${entry} `.includes(` ${run.join(" ")} `));
+  const pathAllowed = (tokens: string) => allowedTokens.some((entry) => tokens === entry || tokens.startsWith(`${entry} `) || entry.startsWith(`${tokens} `));
 
   const needles = input.targets.flatMap((target) => {
     const folded = fold1(target.text);
-    if (allow.has(folded)) {
+    if (allow.has(folded) || (target.path && pathAllowed(tokensOf(folded).join(" ")))) {
       result.allowed.push(target.label);
       return [];
     }
@@ -137,7 +188,7 @@ export function scan(input: ScanInput): ScanResult {
       result.allowed.push(payload.label);
       return [];
     }
-    return [{ label: payload.label, runs: runsOf(payload.text).filter((run) => !allowedTokens.has(run.join(" "))) }];
+    return [{ label: payload.label, runs: runsOf(payload.text, payload.markup ?? false).filter((run) => !runAllowed(run)) }];
   });
 
   const sealedSizes = new Set(input.sealed.map((item) => item.bytes.length));
