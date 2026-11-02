@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ThresholdConfigError } from "../policy/index.js";
 import { GENERATED_HEADER, generateRobots } from "../robots/index.js";
 
 const CONFIG = "threshold.config.ts";
@@ -31,8 +30,10 @@ async function robots(cwd: string, log: (line: string) => void): Promise<number>
   try {
     config = ((await import(pathToFileURL(configPath).href)) as { default?: unknown }).default;
   } catch (err) {
-    // defineThreshold() throws while the config loads.
-    log(err instanceof ThresholdConfigError ? `${CONFIG}:\n${err.message}` : loadFailure(err));
+    // defineThreshold() throws while the config loads, from the package's policy.js:
+    // a different copy of the class than this bundle's, so compare by name.
+    const invalid = (err as Error | undefined)?.name === "ThresholdConfigError";
+    log(invalid ? `${CONFIG}:\n${(err as Error).message}` : loadFailure(err));
     return 1;
   }
   if (config === undefined) {
