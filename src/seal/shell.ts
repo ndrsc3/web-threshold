@@ -15,6 +15,7 @@ export const DEFAULT_SHELL = `<!doctype html>
     </style>
   </head>
   <body>
+    <noscript>This page opens with a phrase, which needs JavaScript.</noscript>
     ${SHELL_MARKER}
   </body>
 </html>
@@ -53,7 +54,7 @@ export function buildShell(template: string, bundlePath: string, payloadName: st
   const parts = template.split(SHELL_MARKER);
   if (parts.length !== 2) throw new Error(`the shell must contain ${SHELL_MARKER} exactly once`);
   const memory = remember ? ` remember="${attr(remember)}"` : "";
-  // One script, so the listener is attached before the element can replay a remembered door.
+  // The element and its handler in one script, so a shell is a single file. A late handler still hears replays.
   const gate = (code: string) =>
     [
       `<web-threshold sealed="${attr(bundlePath)}" data-open="${attr(payloadName)}"${memory} label="Enter the phrase" button="Enter"></web-threshold>`,

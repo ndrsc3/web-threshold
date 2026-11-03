@@ -26,8 +26,8 @@ export interface SealedUnlockedDetail extends TierUnlockedDetail {
 const MEMORY_KEY = "web-threshold:keys";
 
 /**
- * <web-threshold sealed="#bundle"> or sealed="/s/site.json": a phrase opens a record
- * of keys plus site data. Without `sealed`, this is the plain element.
+ * <web-threshold sealed="/s/site.json">: a phrase opens a record of keys plus site data.
+ * Without `sealed`, this is the plain element.
  */
 export class SealedThreshold extends WebThreshold {
   #load: Promise<Bundle | null> | null = null;
@@ -44,7 +44,9 @@ export class SealedThreshold extends WebThreshold {
     if (type !== "tier-unlocked") return;
     for (const detail of this.#replays) {
       queueMicrotask(() => {
-        const event = new CustomEvent("tier-unlocked", { detail });
+        const event = new CustomEvent("tier-unlocked", { detail, bubbles: true, composed: true });
+        // As if dispatched here, so a handler reading the target works the same either way (j-11).
+        for (const key of ["target", "currentTarget"]) Object.defineProperty(event, key, { value: this });
         if (typeof listener === "function") listener.call(this, event);
         else listener.handleEvent(event);
       });
@@ -100,7 +102,7 @@ export class SealedThreshold extends WebThreshold {
   async #replay(bundle: Bundle): Promise<void> {
     for (const stored of this.#storedKeys()) {
       try {
-        for (const record of await openSlots(bundle, fromB64(stored))) this.#unlock(bundle, record, true);
+        for (const record of await openSlots(bundle, fromB64(stored))) this.#unlock(record, true);
       } catch {
         // A damaged entry opens nothing.
       }
@@ -108,11 +110,6 @@ export class SealedThreshold extends WebThreshold {
   }
 
   async #readSource(source: string): Promise<unknown> {
-    if (source.startsWith("#")) {
-      const script = document.getElementById(source.slice(1));
-      if (!script) throw new BundleError("bundle-not-found");
-      return JSON.parse(script.textContent ?? "");
-    }
     const url = new URL(source, location.href);
     if (url.origin !== location.origin) throw new BundleError("cross-origin");
     let response: Response;
@@ -154,7 +151,7 @@ export class SealedThreshold extends WebThreshold {
       const [record] = await openSlots(bundle, kek);
       if (record) {
         this.#keep(kek);
-        this.#unlock(bundle, record);
+        this.#unlock(record);
       } else if (this.hasAttribute("report-wrong")) {
         this.dispatchEvent(new CustomEvent("tier-rejected", { bubbles: true, composed: true }));
       }
@@ -165,7 +162,7 @@ export class SealedThreshold extends WebThreshold {
     }
   }
 
-  #unlock(bundle: Bundle, record: SealedRecord, replayed = false): void {
+  #unlock(record: SealedRecord, replayed = false): void {
     const detail: SealedUnlockedDetail = {
       tier: record.tier,
       data: record.data,
@@ -175,7 +172,7 @@ export class SealedThreshold extends WebThreshold {
         if (!Object.hasOwn(record.open, name)) throw new Error(`this door doesn't open "${name}"`);
         const entry = record.open[name]!;
         try {
-          return new Blob([(await openEntry(bundle, entry, (src) => this.#fetchFile(src))) as BlobPart], { type: entry.type });
+          return new Blob([(await openEntry(entry, (src) => this.#fetchFile(src))) as BlobPart], { type: entry.type });
         } catch (err) {
           // Such as a host answering a .sealed file with its HTML fallback: it fails the tag.
           this.emitFault(err instanceof BundleError ? err.code : "payload-unreadable");

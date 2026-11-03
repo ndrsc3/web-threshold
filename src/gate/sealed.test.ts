@@ -6,35 +6,49 @@ import { MAX_ITERATIONS, deriveKek, encrypt, fold1, fromB64, padRecord, randomBy
 const ITER = 10;
 const encode = (text: string) => new TextEncoder().encode(text);
 
+// The element reads bundles and files over fetch: a small in-memory host. A path it lacks is a 404.
+const served = new Map<string, BodyInit>();
+/** Every path asked for, in order. */
+const requested: string[] = [];
+let served_id = 0;
+globalThis.fetch = (async (input: RequestInfo | URL) => {
+  const path = new URL(String(input), location.href).pathname;
+  requested.push(path);
+  const body = served.get(path);
+  return body === undefined ? new Response("", { status: 404 }) : new Response(body);
+}) as typeof fetch;
+
 async function makeBundle(doors: { phrase: string; tier: string; data?: unknown; payloads?: Record<string, string> }[]): Promise<Bundle> {
   const salt = randomBytes(16);
-  const inline: Bundle["inline"] = [];
   const slots: Bundle["slots"] = [];
   for (const door of doors) {
-    const open: Record<string, { k: string; type: string; pid: string }> = {};
+    const open: Record<string, { k: string; type: string; iv: string; src: string }> = {};
     for (const [name, text] of Object.entries(door.payloads ?? {})) {
       const key = randomBytes(32);
-      const pid = toB64(randomBytes(9));
-      inline.push({ pid, ...(await encrypt(key, encode(text))) });
-      open[name] = { k: toB64(key), type: "text/plain", pid };
+      const sealed = await encrypt(key, encode(text));
+      const src = `/s/${toB64(randomBytes(9))}.sealed`;
+      served.set(src, fromB64(sealed.ct) as BodyInit);
+      open[name] = { k: toB64(key), type: "text/plain", iv: sealed.iv, src };
     }
     const kek = await deriveKek(door.phrase, salt, ITER);
     slots.push(await encrypt(kek, padRecord({ tier: door.tier, open, data: door.data })));
   }
-  return { v: 1, kdf: { iter: ITER, salt: toB64(salt), norm: "fold1" }, slots, inline };
+  return { v: 1, kdf: { iter: ITER, salt: toB64(salt), norm: "fold1" }, slots };
+}
+
+/** Serves a bundle at a fresh path, which goes in the `sealed` attribute. */
+function serve(bundle: unknown): string {
+  const path = `/s/site-${++served_id}.json`;
+  served.set(path, JSON.stringify(bundle));
+  return path;
 }
 
 type Sealed = HTMLElement & { secrets: Record<string, string> };
 
 function mount(bundle: unknown, attrs: Record<string, string> = {}): { el: Sealed; events: { type: string; detail: any }[] } {
   document.body.innerHTML = "";
-  const script = document.createElement("script");
-  script.type = "application/json";
-  script.id = "b";
-  script.textContent = JSON.stringify(bundle);
-  document.body.append(script);
   const el = document.createElement("web-threshold") as Sealed;
-  el.setAttribute("sealed", "#b");
+  el.setAttribute("sealed", serve(bundle));
   for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, value);
   const events: { type: string; detail: any }[] = [];
   for (const type of ["tier-unlocked", "tier-rejected", "threshold-error"]) {
@@ -159,7 +173,7 @@ describe("sealed mode", () => {
     const codes: string[] = [];
     el.addEventListener("threshold-error", (e) => codes.push((e as CustomEvent).detail.code));
     document.body.append(el);
-    el.setAttribute("sealed", "#b");
+    el.setAttribute("sealed", "/s/site.json");
     type(el, "the fox was here");
     await settle(el);
     expect(codes).toEqual(["sealed-set-after-connect"]);
@@ -167,9 +181,11 @@ describe("sealed mode", () => {
 });
 
 describe("faults: threshold-error, no unlock, never tier-rejected", () => {
-  beforeAll(() => {
+  beforeEach(() => {
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
+  // Bundles come over fetch, so a stubbed fetch must not outlive its test.
+  afterEach(() => vi.restoreAllMocks());
 
   const good = async () => makeBundle([{ phrase: "fox", tier: "fox" }]);
   const cases: [string, (b: Bundle) => unknown, string][] = [
@@ -184,7 +200,6 @@ describe("faults: threshold-error, no unlock, never tier-rejected", () => {
     ["numeric fields", (b) => ({ ...b, slots: [{ iv: 1, ct: 2 }] }), "malformed-bundle"],
     ["bad base64", (b) => ({ ...b, slots: [{ iv: "%%", ct: "%%" }] }), "malformed-bundle"],
     ["a bad salt", (b) => ({ ...b, kdf: { ...b.kdf, salt: "%%" } }), "malformed-bundle"],
-    ["a malformed inline payload", (b) => ({ ...b, inline: [{ pid: "x" }] }), "malformed-bundle"],
   ];
 
   it.each(cases)("%s", async (_label, change, code) => {
@@ -375,10 +390,16 @@ describe("session memory", () => {
     const next = mount(bundle, { remember: "session" });
     await vi.waitFor(() => expect(next.events).toHaveLength(1));
     const heard: { replayed: boolean; tier: string }[] = [];
-    next.el.addEventListener("tier-unlocked", (e) => heard.push((e as CustomEvent).detail));
+    const targets: unknown[] = [];
+    next.el.addEventListener("tier-unlocked", (e) => {
+      heard.push((e as CustomEvent).detail);
+      targets.push(e.target, e.currentTarget, e.bubbles);
+    });
     await new Promise((done) => setTimeout(done, 10));
     expect(heard.map((d) => [d.tier, d.replayed])).toEqual([["fox", true]]);
     expect(next.events).toHaveLength(1);
+    // The same event a listener in time would have had (j-11).
+    expect(targets).toEqual([next.el, next.el, true]);
   });
 
   it("an object listener hears a missed replay too", async () => {
@@ -408,13 +429,8 @@ describe("session memory", () => {
     type(first.el, "the fox was here");
     await settle(first.el);
     document.body.innerHTML = "";
-    const script = document.createElement("script");
-    script.id = "b";
-    script.type = "application/json";
-    script.textContent = JSON.stringify(bundle);
-    document.body.append(script);
     const el = document.createElement("web-threshold");
-    el.setAttribute("sealed", "#b");
+    el.setAttribute("sealed", serve(bundle));
     el.setAttribute("remember", "session");
     document.body.append(el); // connected first
     const heard: boolean[] = [];
@@ -431,27 +447,30 @@ describe("URL-loaded payloads", () => {
     const salt = randomBytes(16);
     const open = { pic: { k: toB64(key), type: "image/png", iv: sealed.iv, src } };
     const slots = [await encrypt(await deriveKek("fox", salt, ITER), padRecord({ tier: "fox", open }))];
-    const bundle: Bundle = { v: 1, kdf: { iter: ITER, salt: toB64(salt), norm: "fold1" }, slots, inline: [] };
+    const bundle: Bundle = { v: 1, kdf: { iter: ITER, salt: toB64(salt), norm: "fold1" }, slots };
     return { bundle, cipher: fromB64(sealed.ct) };
   }
   afterEach(() => vi.restoreAllMocks());
 
   it("fetches and opens on request, with the record's type", async () => {
     const { bundle, cipher } = await urlBundle("/s/x.sealed");
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(cipher as BodyInit));
+    served.set("/s/x.sealed", cipher as BodyInit);
+    requested.length = 0;
     const { el, events } = mount(bundle);
     type(el, "fox");
     await settle(el);
-    expect(fetchSpy).not.toHaveBeenCalled(); // lazy
+    // Lazy: the bundle only, until a payload is asked for (k-5).
+    expect(requested.filter((path) => path.endsWith(".sealed"))).toEqual([]);
+    expect(requested).toHaveLength(1);
     const blob = (await events[0]!.detail.open("pic")) as Blob;
+    expect(requested.filter((path) => path.endsWith(".sealed"))).toEqual(["/s/x.sealed"]);
     expect(blob.type).toBe("image/png");
     expect(await blob.text()).toBe("from a file");
   });
 
   it("a failed fetch rejects and emits threshold-error, never tier-rejected", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const { bundle } = await urlBundle("/s/x.sealed");
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("", { status: 404 }));
+    const { bundle } = await urlBundle("/s/never-served.sealed");
     const { el, events } = mount(bundle, { "report-wrong": "" });
     type(el, "fox");
     await settle(el);
@@ -462,31 +481,35 @@ describe("URL-loaded payloads", () => {
   it("refuses a cross-origin file", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const { bundle } = await urlBundle("https://elsewhere.example/x.sealed");
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
     const { el, events } = mount(bundle);
     type(el, "fox");
     await settle(el);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
     await expect(events[0]!.detail.open("pic")).rejects.toThrow();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("an entry with a file but no IV rejects, without fetching", async () => {
+  // No IV, or an entry in the cut inline form (j-9): nothing to fetch.
+  it.each([
+    ["a file but no IV", { src: "/s/x.sealed" }],
+    ["an inline id", { pid: "abc" }],
+  ])("an entry with %s rejects, without fetching", async (_label, shape) => {
     const key = randomBytes(32);
     const salt = randomBytes(16);
-    const open = { pic: { k: toB64(key), type: "image/png", src: "/s/x.sealed" } };
-    const slots = [await encrypt(await deriveKek("fox", salt, ITER), padRecord({ tier: "fox", open }))];
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const { el, events } = mount({ v: 1, kdf: { iter: ITER, salt: toB64(salt), norm: "fold1" }, slots, inline: [] });
+    const open = { pic: { k: toB64(key), type: "image/png", ...shape } };
+    const slots = [await encrypt(await deriveKek("fox", salt, ITER), padRecord({ tier: "fox", open } as never))];
+    const { el, events } = mount({ v: 1, kdf: { iter: ITER, salt: toB64(salt), norm: "fold1" }, slots });
     type(el, "fox");
     await settle(el);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
     await expect(events[0]!.detail.open("pic")).rejects.toThrow("payload-missing");
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("a host's fallback page instead of the file is a fault", async () => {
-    const { bundle } = await urlBundle("/s/x.sealed");
+    const { bundle } = await urlBundle("/s/fallback.sealed");
+    served.set("/s/fallback.sealed", "<html>fallback</html>");
     vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("<html>fallback</html>"));
     const { el, events } = mount(bundle, { "report-wrong": "" });
     type(el, "fox");
     await settle(el);

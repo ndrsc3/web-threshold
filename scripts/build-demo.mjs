@@ -21,6 +21,7 @@ copyFileSync(join(root, "demo/second.html"), join(out, "second.html"));
 copyFileSync(join(root, "demo/bench.html"), join(out, "bench.html"));
 copyFileSync(join(root, "demo/golden.html"), join(out, "golden.html"));
 copyFileSync(join(root, "src/gate/__golden__/v1.json"), join(out, "golden.json"));
+copyFileSync(join(root, "src/gate/__golden__/note.sealed"), join(out, "golden-note.sealed"));
 copyFileSync(join(root, "demo/handler.js"), join(out, "handler.js"));
 copyFileSync(join(root, "dist/web-threshold-sealed.js"), join(out, "web-threshold-sealed.js"));
 

@@ -4,11 +4,8 @@ Status: active
 Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-encrypted-tiers.md`
 
 ## P1 — now
-- [ ] **v0.5 sealed mode: phone bench** `[GATE]` — all three slices built and passing in Chromium, WebKit and Firefox; ▶ owner: open `bench.html` on a real phone over HTTPS; over 1 s returns to the owner
-  - plan: `docs/plans/261029-v0.5-encrypted-tiers.md` · design: `docs/plans/261102-v0.5-sealed-design.md`
-- [ ] **v0.5 sealed mode: release** `[GATE]` — ▶ one final `/adversarial-review` of the last fixes (each pass so far found highs), then a clean-clone build (`dist/` is still v0.4.0), tag `v0.5.0`, owner pushes
-- [ ] **Port guard mutations to the house `mutation-check.py`** `[GATE]` — session lists and the two site-trial scripts in `docs/mutations/`; some target strings are stale, and they print MISSING rather than fail
-- [ ] **Default shell: `<noscript>` line** `[GATE]` — with JavaScript off a sealed page is blank; nothing leaks, but say why. Design note § Every way into a sealed page
+- [ ] **v0.5.0: push** `[GATE]` — built from a clean clone and tagged locally (261102) ▶ owner: `git push origin main v0.5.0`, then bump consumers
+- [ ] **Port guard mutations to the house `mutation-check.py`** `[GATE]` — after the v0.5.0 tag (owner 261102). Session lists and the two site-trial scripts in `docs/mutations/`; some target strings are stale, and they print MISSING rather than fail
 - [ ] **Banana Rodeo: whole-site trial done, adoption later** `[GATE]` — owner 261102: revisit later. Open for it: pages in a public repo, its Vercel-hosted build, images stay public; a signed cookie is the alternative for a real lock
 
 ## P2 — next-up
@@ -24,6 +21,8 @@ Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-
 - [ ] **Maze** — parked 261102 (owner): record and refuse first; revisit only if a site wants it as an exhibit
 
 ## Done
+- [x] **Default shell: `<noscript>` line** — a sealed page with JavaScript off says it needs it (261102)
+- [x] **v0.5 sealed mode: phone bench** — median 73 ms, slowest 80 ms at 600k and 64 slots, Pixel 9 Pro over HTTPS; older phones and iOS unmeasured (261102)
 - [x] **v0.4.0: visitor policy level 0** — config, 43-bot list, generated robots.txt, gate inherited-key fix; ▶ first adopter checks the file on a Vercel preview (261102)
 - [x] **Gate moved to `src/gate/`** — shared base for both tracks; `dist/web-threshold.js` byte-identical (261102)
 - [x] **v0.3.0** — `label` and `button` attributes, styleable parts (261029)

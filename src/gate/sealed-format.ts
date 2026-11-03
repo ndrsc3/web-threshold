@@ -17,17 +17,14 @@ export interface Bundle {
   v: 1;
   kdf: { iter: number; salt: string; norm: string };
   slots: Sealed[];
-  inline: (Sealed & { pid: string })[];
 }
 
+/** Every payload is its own file (j-9): where its raw ciphertext is, and the IV, so the file itself is pure ciphertext. */
 export interface OpenEntry {
   k: string;
   type: string;
-  /** Inline: the payload's id in the bundle. */
-  pid?: string;
-  /** URL-loaded: where its raw ciphertext is, and the IV, so the file itself is pure ciphertext. */
-  src?: string;
-  iv?: string;
+  src: string;
+  iv: string;
 }
 
 export interface SealedRecord {
@@ -99,14 +96,9 @@ export async function decrypt(key: Uint8Array, sealed: Sealed): Promise<Uint8Arr
   return new Uint8Array(plain);
 }
 
-/** Inline or URL-loaded; `readFile` is how this side reaches a `.sealed` file. */
-export async function openEntry(
-  bundle: Bundle,
-  entry: OpenEntry,
-  readFile: (src: string) => Promise<Uint8Array>,
-): Promise<Uint8Array> {
-  if (entry.src === undefined) return openPayload(bundle, entry);
-  if (entry.iv === undefined) throw new BundleError("payload-missing");
+/** `readFile` is how this side reaches a `.sealed` file. */
+export async function openEntry(entry: OpenEntry, readFile: (src: string) => Promise<Uint8Array>): Promise<Uint8Array> {
+  if (typeof entry.src !== "string" || typeof entry.iv !== "string") throw new BundleError("payload-missing");
   const plain = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: buffer(fromB64(entry.iv)) },
     await aes(fromB64(entry.k)),
@@ -136,12 +128,6 @@ export async function openSlots(bundle: Bundle, kek: Uint8Array): Promise<Sealed
   return records;
 }
 
-export async function openPayload(bundle: Bundle, entry: OpenEntry): Promise<Uint8Array> {
-  const sealed = bundle.inline.find((item) => item.pid === entry.pid);
-  if (!sealed) throw new BundleError("payload-missing");
-  return decrypt(fromB64(entry.k), sealed);
-}
-
 const isB64 = (value: unknown) => typeof value === "string" && /^[A-Za-z0-9_-]+$/.test(value);
 const isSealed = (item: unknown) => isB64((item as Sealed | null)?.iv) && isB64((item as Sealed | null)?.ct);
 
@@ -157,8 +143,5 @@ export function parseBundle(value: unknown): Bundle {
   if (kdf.iter > MAX_ITERATIONS) throw new BundleError("iterations-over-ceiling");
   if (!isB64(kdf.salt)) throw new BundleError("malformed-bundle");
   if (!Array.isArray(bundle.slots) || !bundle.slots.every(isSealed)) throw new BundleError("malformed-bundle");
-  if (bundle.inline !== undefined && (!Array.isArray(bundle.inline) || !bundle.inline.every(isSealed))) {
-    throw new BundleError("malformed-bundle");
-  }
-  return { ...(bundle as Bundle), inline: bundle.inline ?? [] };
+  return bundle as Bundle;
 }

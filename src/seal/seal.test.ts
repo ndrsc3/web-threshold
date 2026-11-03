@@ -1,12 +1,12 @@
 // @vitest-environment node
 import { execFileSync } from "node:child_process";
-import { chmodSync, closeSync, existsSync, ftruncateSync, linkSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, ftruncateSync, linkSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, type PathLike } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 import { beforeEach, describe, expect, it } from "vitest";
 import { run } from "../cli/run.js";
-import { deriveKek, encrypt, fromB64, openEntry, openPayload, openSlots, padRecord, randomBytes, toB64, type Bundle } from "../gate/sealed-format.js";
+import { deriveKek, encrypt, fromB64, openEntry, openSlots, padRecord, randomBytes, toB64, type Bundle } from "../gate/sealed-format.js";
 import { BUNDLE_PATH, buildBundle, seal, verifyBundle, type DoorsFile } from "./index.js";
 import { HANDLER } from "./shell.js";
 
@@ -56,7 +56,8 @@ describe("a good run", () => {
     const bundle = written();
     expect(bundle.kdf).toMatchObject({ iter: 600_000, norm: "fold1" });
     const [record] = await openSlots(bundle, await deriveKek(STRONG, fromB64(bundle.kdf.salt), bundle.kdf.iter));
-    expect(new TextDecoder().decode(await openPayload(bundle, record!.open.note!))).toContain("hidden note");
+    const plain = await openEntry(record!.open.note!, async (src) => new Uint8Array(readFileSync(join(out, src))));
+    expect(new TextDecoder().decode(plain)).toContain("hidden note");
     expect(report()).toContain("sealed 1 doors");
     expect(report()).toMatch(/git: (not checked|untracked)/);
   });
@@ -405,53 +406,58 @@ describe("read-back catches a bad sealer", () => {
     allowPublic: [],
   };
   const contents = new Map([["a", new TextEncoder().encode("aaa")], ["b", new TextEncoder().encode("bbb")]]);
+  // Sealed by `sealed`, checked against the real doors file and contents, with the files it wrote.
+  const check = async (sealed: DoorsFile, c: Map<string, Uint8Array>) => {
+    const { bundle, files } = await buildBundle(sealed, c);
+    return [bundle, file, contents, files] as const;
+  };
 
   it("passes a good bundle", async () => {
-    await expect(verifyBundle((await buildBundle(file, contents)).bundle, file, contents)).resolves.toBeUndefined();
+    await expect(verifyBundle(...(await check(file, contents)))).resolves.toBeUndefined();
   });
 
   it("a record holding an undeclared key", async () => {
     const wider: DoorsFile = { ...file, doors: [{ tier: "one", phrase: "first door phrase", open: ["a", "b"] }, file.doors[1]!] };
-    await expect(verifyBundle((await buildBundle(wider, contents)).bundle, file, contents)).rejects.toThrow(/exactly its declared/);
+    await expect(verifyBundle(...(await check(wider, contents)))).rejects.toThrow(/exactly its declared/);
   });
 
   it("different content", async () => {
     const other = new Map(contents).set("a", new TextEncoder().encode("xxx"));
-    await expect(verifyBundle((await buildBundle(file, other)).bundle, file, contents)).rejects.toThrow(/byte-identical/);
+    await expect(verifyBundle(...(await check(file, other)))).rejects.toThrow(/byte-identical/);
   });
 
   it("corrupted ciphertext", async () => {
-    const { bundle } = await buildBundle(file, contents);
+    const { bundle, files } = await buildBundle(file, contents);
     bundle.slots[0]!.ct = bundle.slots[0]!.ct.replace(/^./, (c) => (c === "A" ? "B" : "A"));
-    await expect(verifyBundle(bundle, file, contents)).rejects.toThrow(/opened 0 slots/);
+    await expect(verifyBundle(bundle, file, contents, files)).rejects.toThrow(/opened 0 slots/);
   });
 
   it("swapped tiers", async () => {
     const swapped: DoorsFile = { ...file, doors: [{ ...file.doors[0]!, tier: "two" }, { ...file.doors[1]!, tier: "one" }] };
-    await expect(verifyBundle((await buildBundle(swapped, contents)).bundle, file, contents)).rejects.toThrow(/another door's record/);
+    await expect(verifyBundle(...(await check(swapped, contents)))).rejects.toThrow(/another door's record/);
   });
 
   it("two payloads sharing a key", async () => {
     const salt = randomBytes(16);
     const key = randomBytes(32);
-    const inline: Bundle["inline"] = [];
     const slots: Bundle["slots"] = [];
+    const files = new Map<string, Uint8Array>();
     for (const door of file.doors) {
       const name = door.open[0]!;
-      const pid = `pid-${name}`;
-      inline.push({ pid, ...(await encrypt(key, contents.get(name)!)) });
-      const open = { [name]: { k: toB64(key), type: "text/plain", pid } };
+      const sealed = await encrypt(key, contents.get(name)!);
+      files.set(`s/${name}.sealed`, fromB64(sealed.ct));
+      const open = { [name]: { k: toB64(key), type: "text/plain", iv: sealed.iv, src: `/s/${name}.sealed` } };
       slots.push(await encrypt(await deriveKek(door.phrase, salt, 10), padRecord({ tier: door.tier, open })));
     }
-    const bundle: Bundle = { v: 1, kdf: { iter: 10, salt: toB64(salt), norm: "fold1" }, slots, inline };
-    await expect(verifyBundle(bundle, file, contents)).rejects.toThrow(/share a key/);
+    const bundle: Bundle = { v: 1, kdf: { iter: 10, salt: toB64(salt), norm: "fold1" }, slots };
+    await expect(verifyBundle(bundle, file, contents, files)).rejects.toThrow(/share a key/);
   });
 
   it("a slot that any phrase opens", async () => {
-    const { bundle } = await buildBundle(file, contents);
+    const { bundle, files } = await buildBundle(file, contents);
     const extra = await encrypt(await deriveKek("first door phrase", fromB64(bundle.kdf.salt), bundle.kdf.iter), padRecord({ tier: "one", open: {} }));
     bundle.slots.push(extra);
-    await expect(verifyBundle(bundle, file, contents)).rejects.toThrow(/opened 2 slots/);
+    await expect(verifyBundle(bundle, file, contents, files)).rejects.toThrow(/opened 2 slots/);
   });
 
   it("a real run stops on a bad sealer, writing nothing", async () => {
@@ -731,7 +737,7 @@ describe("URL-loaded payloads", () => {
     const { bundle, record } = await openWith(STRONG);
     const entry = record.open.moth!;
     expect(entry.src).toBe(`/s/${name}`);
-    expect(Buffer.compare(Buffer.from(await openEntry(bundle, entry, readFromOut)), bytes)).toBe(0);
+    expect(Buffer.compare(Buffer.from(await openEntry(entry, readFromOut)), bytes)).toBe(0);
   });
 
   it("doesn't name the file anywhere public", async () => {
@@ -742,7 +748,7 @@ describe("URL-loaded payloads", () => {
     expect(report()).not.toContain(sealedFiles()[0]!);
   });
 
-  it("keeps text under 64 KiB inline, and moves longer text to a file", async () => {
+  it("writes every payload to its own file, keeping the bundle free of them (j-9)", async () => {
     write({
       payloads: {
         small: { from: source("small.txt", "little words here"), type: "text/plain" },
@@ -751,11 +757,11 @@ describe("URL-loaded payloads", () => {
       doors: [{ tier: "a", phrase: STRONG, open: ["small", "big"] }],
     });
     expect(await go()).toBe(0);
-    expect(written().inline).toHaveLength(1);
-    expect(sealedFiles()).toHaveLength(1);
+    expect(Object.keys(written())).toEqual(["v", "kdf", "slots"]);
+    expect(sealedFiles()).toHaveLength(2);
   });
 
-  it("scans text it moved to a file", async () => {
+  it("scans the text of a payload in a file", async () => {
     const text = Array.from({ length: 12_000 }, (_, i) => `word${i}`).join(" ");
     write({ payloads: { big: { from: source("big.txt", text), type: "text/plain" } }, doors: [{ tier: "a", phrase: STRONG, open: ["big"] }] });
     site({ "a.html": `<p>${text.split(" ").slice(500, 516).join(" ")}</p>` });
@@ -846,9 +852,8 @@ describe("sealed pages", () => {
     write(doors());
     await seal2();
     const bundle = written();
-    expect(bundle.inline).toEqual([]);
     const [record] = await openSlots(bundle, await deriveKek(STRONG, fromB64(bundle.kdf.salt), bundle.kdf.iter));
-    const plain = await openEntry(bundle, record!.open.room!, async (src) => new Uint8Array(readFileSync(join(out, src))));
+    const plain = await openEntry(record!.open.room!, async (src) => new Uint8Array(readFileSync(join(out, src))));
     expect(new TextDecoder().decode(plain)).toBe(secret);
   });
 
@@ -1178,7 +1183,7 @@ describe("sealing built pages in place", () => {
     expect(shell).not.toContain("Members only");
     const bundle = written();
     const [record] = await openSlots(bundle, await deriveKek(STRONG, fromB64(bundle.kdf.salt), bundle.kdf.iter));
-    const plain = await openEntry(bundle, record!.open.about!, async (src) => new Uint8Array(readFileSync(join(out, src))));
+    const plain = await openEntry(record!.open.about!, async (src) => new Uint8Array(readFileSync(join(out, src))));
     expect(new TextDecoder().decode(plain)).toBe(SECRET);
   });
 
@@ -1333,5 +1338,143 @@ describe("in-place safety (i-1, i-2)", () => {
     write(one());
     expect(await run()).toBe(0);
     expect(execFileSync("find", [out, "-name", ".seal-*"]).toString()).toBe("");
+  });
+});
+
+describe("pass j: leaks and guards", () => {
+  const page = (body: string, title = "t") => `<!doctype html><html><head><title>${title}</title></head><body>${body}</body></html>`;
+  const SECRET = "the vault code is under the third stone beside the old mill wheel";
+  const temps = () => execFileSync("find", [out, "-name", ".seal-*"]).toString();
+
+  it.each([
+    ["&rsquo;", "the fox's den is here", "<p>the fox&rsquo;s den is here</p>"],
+    ["&ntilde;", "el señor de la finka", "<p>el se&ntilde;or de la finka</p>"],
+    ["&eacute;", "cafétéria générale du port", "<p>caf&eacute;t&eacute;ria g&eacute;n&eacute;rale du port</p>"],
+    ["&shy;", STRONG, `<p>${STRONG.replace("quietly", "qui&shy;etly")}</p>`],
+    // Invisible characters a hyphenator or editor inserts, in every spelling (k-1).
+    ["&#173;", STRONG, `<p>${STRONG.replace("quietly", "qui&#173;etly")}</p>`],
+    ["&#xAD;", STRONG, `<p>${STRONG.replace("quietly", "qui&#xAD;etly")}</p>`],
+    ["a literal soft hyphen", STRONG, `<p>${STRONG.replace("quietly", "qui­etly")}</p>`],
+    ["a JS \\u00AD", STRONG, `<script>const s = "${STRONG.replace("quietly", "qui\\u00ADetly")}";</script>`],
+    ["a zero-width space", STRONG, `<p>${STRONG.replace("quietly", "qui​etly")}</p>`],
+    ["a zero-width joiner", STRONG, `<p>${STRONG.replace("quietly", "qui‍etly")}</p>`],
+    ["a word joiner", STRONG, `<p>${STRONG.replace("quietly", "qui⁠etly")}</p>`],
+  ])("a phrase written with %s aborts (j-1)", async (_label, phrase, body) => {
+    write(basic(phrase));
+    site({ "index.html": page(body) });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("the phrase of door fox appears in index.html");
+  });
+
+  it.each([
+    ["\\xF1", 'const a="el se\\xF1or de la finka";'],
+    ["\\u{f1}", 'const a="el se\\u{f1}or de la finka";'],
+  ])("a phrase in a script written with %s aborts (j-1)", async (_label, code) => {
+    write(basic("el señor de la finka"));
+    site({ "app.js": code });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("the phrase of door fox appears in app.js");
+  });
+
+  it("payload text written with entities is found in a decoded copy (j-1)", async () => {
+    const words = Array.from({ length: 60 }, (_, i) => (i % 6 === 5 ? `don&rsquo;t${i}` : `word${i}`)).join(" ");
+    write({ payloads: { s: { from: source("s.html", `<p>${words}</p>`), type: "text/html" } }, doors: [{ tier: "a", phrase: STRONG, open: ["s"] }] });
+    site({ "feed.json": JSON.stringify({ text: words.replace(/&rsquo;/g, "’") }) });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("text of payload s appears in feed.json");
+  });
+
+  it.each(["application/xml", "application/javascript", "application/x-yaml", "application/octet-stream"])(
+    "a %s payload that reads as text is scanned (j-2)",
+    async (type) => {
+      write({ payloads: { s: { from: source("s.txt", `<a>${SECRET}</a>`), type } }, doors: [{ tier: "a", phrase: STRONG, open: ["s"] }] });
+      site({ "feed.txt": `copy: ${SECRET}` });
+      expect(await go()).toBe(1);
+      expect(report()).toContain("text of payload s appears in feed.txt");
+    },
+  );
+
+  it("a compressed copy of a page sealed in place aborts, however little text it shows (j-3)", async () => {
+    const spa = page(`<div id="app"></div><script>app.textContent = "${SECRET}";</script>`, "Members Area");
+    site({ "members/index.html": spa, "members/index.html.gz": gzipSync(spa), "members/index.html.br": brotliCompressSync(spa) });
+    write({ payloads: { m: { type: "text/html", page: "members/index.html" } }, doors: [{ tier: "a", phrase: STRONG, open: ["m"] }] });
+    expect(await go({ element: "/* e */" })).toBe(1);
+    expect(report()).toContain("members/index.html.gz is a compressed public copy of payload m");
+    expect(report()).toContain("members/index.html.br is a compressed public copy of payload m");
+  });
+
+  it("a compressed copy of a sealed image aborts (j-3)", async () => {
+    const bytes = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), randomBytes(300)]);
+    writeFileSync(join(dir, "moth.png"), bytes);
+    write({ payloads: { moth: { from: "moth.png", type: "image/png" } }, doors: [{ tier: "a", phrase: STRONG, open: ["moth"] }] });
+    site({ "moth.png.gz": gzipSync(bytes) });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("moth.png.gz is a compressed public copy of payload moth");
+  });
+
+  it("a phrase in a file name aborts (j-10)", async () => {
+    write(basic());
+    site({ [`${STRONG.replace(/ /g, "-")}.html`]: page("x") });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("the phrase of door fox appears in a file name in the top folder");
+    // The name is the secret, so the log never prints it (k-2).
+    expect(report()).not.toMatch(/marble|quietly|unfolds/);
+  });
+
+  it.each([
+    ["spaces", "the hidden room under the mill"],
+    ["hyphens", "the-hidden-room-under-the-mill"],
+  ])("a data key written as words with %s aborts (j-10, k-3)", async (_label, key) => {
+    write(basic(STRONG, { [key]: true }));
+    site({ "index.html": page("<p>the hidden room under the mill</p>") });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("a data value of door fox appears in index.html");
+  });
+
+  it("an empty data value warns about nothing (j-13)", async () => {
+    write(basic(STRONG, { s: "" }));
+    site({ "index.html": page("<p>x</p>") });
+    expect(await go()).toBe(0);
+    expect(report()).not.toContain("data value");
+  });
+
+  it("a hidden page's clean URL aborts (j-13)", async () => {
+    write({
+      payloads: { room: { from: source("in.html", page("<p>inside</p>")), type: "text/html", page: "s/inner-room-7f3a9b.html" } },
+      doors: [{ tier: "a", phrase: STRONG, open: ["room"] }],
+    });
+    site({ "index.html": page('<a href="/s/inner-room-7f3a9b">go</a>') });
+    expect(await go({ element: "/* e */" })).toBe(1);
+    expect(report()).toContain("the path of payload room appears in index.html");
+  });
+
+  it("warns when a sealed page loads an external script (j-12)", async () => {
+    site({ "room.html": page('<script src="https://www.googletagmanager.com/gtag/js"></script><p>words for those who know the way</p>') });
+    write({ payloads: { room: { type: "text/html", page: "room.html" } }, doors: [{ tier: "a", phrase: STRONG, open: ["room"] }] });
+    expect(await go({ element: "/* e */" })).toBe(0);
+    expect(report()).toContain("payload room loads an external script");
+  });
+
+  it("a rename failing partway leaves the bundle, no temporary files, and a rerun that refuses (j-6)", async () => {
+    site({ "page.html": page("<p>Words for those who know the way in.</p>") });
+    write({ payloads: { p: { type: "text/html", page: "page.html" } }, doors: [{ tier: "a", phrase: STRONG, open: ["p"] }] });
+    let calls = 0;
+    const failing = (from: PathLike, to: PathLike) => {
+      if (++calls === 2) throw Object.assign(new Error("disk"), { code: "EIO" });
+      renameSync(from, to);
+    };
+    expect(await go({ element: "/* e */", rename: failing })).toBe(1);
+    expect(report()).toContain("writing stopped partway (EIO)");
+    expect(existsSync(join(out, BUNDLE_PATH))).toBe(true);
+    expect(temps()).toBe("");
+    expect(await go({ element: "/* e */" })).toBe(1);
+    expect(report()).toContain(`${BUNDLE_PATH} is already in --out`);
+  });
+
+  it("the default shell says why it's blank without JavaScript", async () => {
+    site({ "page.html": page("<p>Words for those who know the way in.</p>") });
+    write({ payloads: { p: { type: "text/html", page: "page.html" } }, doors: [{ tier: "a", phrase: STRONG, open: ["p"] }] });
+    expect(await go({ element: "/* e */" })).toBe(0);
+    expect(readFileSync(join(out, "page.html"), "utf8")).toContain("<noscript>This page opens with a phrase, which needs JavaScript.</noscript>");
   });
 });

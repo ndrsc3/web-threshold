@@ -1,4 +1,5 @@
-// Walks a sealed copy of Banana Rodeo's real build across pages. Usage: node br-walk.mjs <clone-with-playwright> <site-dir>
+// Walks a sealed copy of Banana Rodeo's real build across pages; needs that site's private build.
+// Usage: node docs/mutations/261102-trial-site-walk.mjs <clone-with-playwright> <site-dir>
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";

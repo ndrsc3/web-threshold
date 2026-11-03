@@ -2,14 +2,14 @@
 
 **The Threshold** — a reusable entry gate as a Web Component. A single input field; what the visitor types decides which tier of content opens. No accounts, no login modals. A wrong phrase fails silently.
 
-Used by La Finka's sites and others: lafinka.space, noesis.lafinka.space, banana.rodeo (planned), and the La Finka digital garden (planned, with the v0.5 sealed mode).
+Used by La Finka's sites and others: lafinka.space, noesis.lafinka.space and banana.rodeo (planned).
 
 ## Install
 
 Pin a tag. Each site upgrades on purpose.
 
 ```bash
-npm install github:ndrsc3/web-threshold#v0.4.0
+npm install github:ndrsc3/web-threshold#v0.5.0
 ```
 
 ```ts
@@ -20,7 +20,7 @@ import type { WebThreshold } from "@ndrsc3/web-threshold";
 Plain HTML, no build step:
 
 ```html
-<script type="module" src="https://cdn.jsdelivr.net/gh/ndrsc3/web-threshold@v0.4.0/dist/web-threshold.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/gh/ndrsc3/web-threshold@v0.5.0/dist/web-threshold.js"></script>
 ```
 
 ## Contract
@@ -48,7 +48,7 @@ Plain HTML, no build step:
 
 ## Sealed mode: the entry point to a labyrinth
 
-Unreleased, planned for v0.5. A phrase opens a sealed record of keys plus free-form data of your own, and the element hands it to your page as an event. Nothing it opens is readable in the page's source, on a plain static host.
+New in v0.5. A phrase opens a sealed record of keys plus free-form data of your own, and the element hands it to your page as an event. Nothing it opens is readable in the page's source, on a plain static host.
 
 **1. Write a doors file.** This is the config and the mapping: each door says what its phrase opens, and what data your page receives. Keep it out of git and out of your build output, because it holds the phrases.
 
@@ -68,7 +68,7 @@ Unreleased, planned for v0.5. A phrase opens a sealed record of keys plus free-f
 web-threshold seal --doors doors.json --out dist
 ```
 
-This writes `dist/s/site.json`, proves each phrase opens exactly its own payloads, and stops the build if a secret is found in your public files.
+This writes `dist/s/site.json` and one `.sealed` file per payload beside it, proves each phrase opens exactly its own payloads, and stops the build if a secret is found in your public files. Sealed files are fetched from `/s/…`, so the site has to be served from a domain's root, not a subpath such as a GitHub Pages project site.
 
 **3. Use the sealed entry, and react to the event.** The element never navigates, styles or plays anything: that's your page.
 
@@ -90,20 +90,21 @@ This writes `dist/s/site.json`, proves each phrase opens exactly its own payload
 - **Wrong phrases are silent** unless you set `report-wrong`, which emits `tier-rejected`. Faults (a bad bundle, a failed fetch) emit `threshold-error` with a `code`, never `tier-rejected`.
 - **While a phrase is being checked**, the element sets `busy` and `aria-busy`, which you can style. A slow phone can take a moment.
 
-**What the build check does.** A secret found in your public files stops the build if it's 3+ words or 16+ characters; a shorter match warns. `allowPublic` lists exact strings that are meant to be public, such as a clue or a footer a sealed note shares with the site. It reads through tags, JSON and URL escapes, HTML entities and `.gz`/`.br`, but not other encodings such as base64, and it can't see inside images. In a language written without spaces, a sealed note is only matched in whole runs between punctuation. Unknown file types stop the build, because they can't be checked.
+**What the build check does.** It's a safety net for ordinary mistakes, not a guarantee: keeping secrets out of your public files is still your job. A secret found in your public files or their names stops the build if it's 3+ words or 16+ characters; a shorter match warns. `allowPublic` lists exact strings that are meant to be public, such as a clue or a footer a sealed note shares with the site. It reads through tags; JSON and script escapes (`\n`, `\uXXXX`, `\u{…}`, `\xXX`); URL escapes; numeric HTML entities and the common named ones (quotes, dashes, `&hellip;`, `&nbsp;`, `&shy;`, accented letters such as `&eacute;`); invisible characters that split words (soft hyphens, zero-width spaces and joiners); and one level of `.gz`/`.br`, where a compressed copy of a sealed file also stops the build. It doesn't read other encodings, such as base64, rarer named entities or a file compressed twice, and it can't see inside images. In a language written without spaces, a sealed note is only matched in whole runs between punctuation. Unknown file types stop the build, because they can't be checked.
 
 **Limits:**
 - Anyone can copy the file and guess offline, as fast as their hardware allows. Weak phrases only get a warning, which is fine for eggs. For anything you care about, use several random words. Not for personal, financial or regulated data.
 - The door count is public: it's the length of an array.
-- A script on the page can see phrases and opened content, so sealed pages shouldn't load third-party scripts. Self-host this element there rather than using the CDN. `seal` warns if it sees an external script beside a sealed gate.
+- A script on the page can see phrases and opened content, so sealed pages shouldn't load third-party scripts. Self-host this element there rather than using the CDN. `seal` warns if it sees an external script beside a sealed gate, or in a sealed page.
 - Set `sealed` before the element connects. Setting it later emits `threshold-error`.
-- Files are capped at 10 MiB, with a warning over 2 MiB, because a phone holds them twice in memory while opening them. Sealed files use root-relative paths, so deploy at a domain's root. A resized copy of a sealed image in your public files isn't detected.
+- Files are capped at 10 MiB, with a warning over 2 MiB, because a phone holds them twice in memory while opening them. A resized copy of a sealed image in your public files isn't detected.
 - The build check skips the bodies of `<style>` and executable `<script>` in sealed pages, which usually match the public site's, so it won't notice a secret written in them leaking elsewhere. Boilerplate of 8+ words in a sealed page's visible text or long attributes, such as a shared footer, stops the build until you list it in `allowPublic`.
 - A sealed page with an import map fails in Firefox, because the shell's own module already ran. Sealed pages should use ordinary script URLs.
 - A sealed page's address, and its payload name, are public. Only the content is protected, and a phrase can't be revoked once a copy of the bundle is out.
+- After you remove a sealed page from the doors file, rebuild the site: deleting `s/` by hand and resealing leaves its old shell in place, opening nothing.
 - Remembered unlocks last for one tab. A plain new tab starts fresh and retypes. Page scripts can read the stored key, but it only opens that phrase's door, and it never reveals the phrase.
 
-**Images and files.** Any payload with a non-text type, or text over 64 KiB, becomes a pure-ciphertext file at a random name, listed only inside the doors that open it. `detail.open(name)` fetches it on request and returns a `Blob`, so an image is `img.src = URL.createObjectURL(blob)`.
+**Images and files.** Every payload, text or not, becomes a pure-ciphertext file at a random name, listed only inside the doors that open it. `detail.open(name)` fetches it on request and returns a `Blob`, so an image is `img.src = URL.createObjectURL(blob)`.
 
 **Whole pages.** Give an HTML payload a `page`, and `seal` writes a small public shell at that path. The shell holds the door, and the right phrase replaces the document with your page, whose own scripts and styles then run.
 
@@ -121,7 +122,7 @@ This writes `dist/s/site.json`, proves each phrase opens exactly its own payload
 
 **Remembering across pages.** With `remember="session"` on the element (`"remember": "session"` in the doors file does this for shells), a door opened once stays open in that tab, across pages and reloads. On load, the element emits `tier-unlocked` again with `detail.replayed` true for each remembered door. A listener on the element hears any replay it missed, however late it attaches; a listener on `document` has to be there first. A handler that re-routes must skip replays, or a reload loops. After a rebuild, remembered keys open nothing, and visitors retype.
 
-**Every way in.** Each sealed address serves its own door, so a deep link, QR code or bookmark opens that same page after its phrase, keeping its full address. With `remember`, links, reloads and back and forward open directly in that tab, while a new tab asks again unless a script opened it. With JavaScript off the page is blank, and a shared link shows a generic card unless a custom shell adds public preview tags.
+**Every way in.** Each sealed address serves its own door, so a deep link, QR code or bookmark opens that same page after its phrase, keeping its full address. With `remember`, links, reloads and back and forward open directly in that tab, while a new tab asks again unless a script opened it or the link keeps its opener (`rel="opener"`). With JavaScript off, the default shell shows one line saying the page needs it, and a shared link shows a generic card unless a custom shell adds public preview tags.
 
 To try it: `npm run build && npm run demo`, then open `http://localhost:4173`. `npm run test:browsers` runs the demo in Chromium, WebKit and Firefox.
 
@@ -204,10 +205,16 @@ npm run build      # dist/: ES module + .d.ts
 
 ## Releasing
 
-`dist/` is committed so git-tag installs and the CDN need no build. For each release: bump `version` in `package.json`, `npm test && npm run build`, commit `dist/` with the source, tag `vX.Y.Z`, push the tag, then bump the consumers you want on it.
+`dist/` is committed so git-tag installs and the CDN need no build. It's built from a clean clone, so nothing uncommitted can reach it. For each release:
+
+1. **Source commit.** Bump `version` in `package.json`, the two `vX.Y.Z` install lines above, and add a History entry. Commit, and check `git status` shows nothing left over: an untracked file the build needs, such as a golden fixture, fails the clone in step 2.
+2. **Clean clone.** In an empty temp folder: `git clone <this repo> . && npm ci && npm run typecheck && npm test && npm run build && npm run demo:build && npm run test:browsers && npm run test:consumer`. Any failure stops the release.
+3. **dist commit.** `rsync -a --delete <clone>/dist/ dist/`, then commit `dist/` alone as `vX.Y.Z: dist, built from a clean clone of <source sha>`.
+4. **Tag** that commit `vX.Y.Z`, push `main` and the tag, then bump the consumers you want on it.
 
 ## History
 
+- **v0.5.0** — Sealed mode: `web-threshold seal` and the `@ndrsc3/web-threshold/sealed` entry. A phrase opens a sealed record of keys plus free-form `data`; payloads are pure-ciphertext files; whole pages sit behind a shell, or are sealed in place in a built site; `remember="session"` keeps doors open per tab. `seal` proves each phrase opens exactly its own payloads and stops the build when a secret is found in public output. Plain mode is unchanged. Bundle format v1.
 - **v0.4.0** — Visitor policy: `defineThreshold()` (`@ndrsc3/web-threshold/policy`), four presets, raw `extra` lines and `web-threshold robots`. Gate fix: inherited object keys such as `constructor` no longer fire `tier-unlocked`, which changes `dist/web-threshold.js`. Adds the LICENSE file. A site naming a bot that later leaves the list stops building, by design.
 - **v0.3.0** — `label` and `button` attributes; `::part(label)` and `::part(button)`. Labels and button text are HTML-escaped.
 - **v0.2.0** — extracted from `web_lafinka` (`packages/threshold`, branch `path0/threshold-v0.1`, `a04bb6b`) into its own repo. Renamed `<finka-threshold>` → `<web-threshold>` (breaking). Added the `inputmode` passthrough and `submit()`.

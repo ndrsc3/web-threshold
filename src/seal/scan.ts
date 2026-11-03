@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { extname, join, relative } from "node:path";
+import { dirname, extname, join, relative } from "node:path";
 import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import { fold1 } from "../gate/sealed-format.js";
 
@@ -49,7 +49,11 @@ export interface ScanResult {
   counts: { text: number; compressed: number; binary: number };
 }
 
-const tokensOf = (folded: string) => [...folded.matchAll(/[\p{L}\p{N}]+/gu)].map((match) => match[0]);
+export const tokensOf = (folded: string) => [...folded.matchAll(/[\p{L}\p{N}]+/gu)].map((match) => match[0]);
+/** A script loaded from another origin. */
+export const EXTERNAL_SCRIPT = /<script\b[^>]{0,500}\bsrc\s*=\s*["']?(https?:)?\/\//i;
+// Soft hyphen, zero-width space/joiners, word joiner, BOM: invisible, yet they split words (k-1).
+const INVISIBLE = /[­​-‍⁠﻿]/g;
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 /** Linear on purpose: `/<[^>]*>/` goes quadratic on a `<` with no `>` after it. */
@@ -100,12 +104,24 @@ function attributeTexts(text: string): string[] {
   return [...values].map((match) => match[1] ?? match[2] ?? "").filter((value) => tokensOf(fold1(value)).length >= RUN);
 }
 
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+// The named entities that split words in ordinary prose (j-1). Others are a stated limit (README).
+const ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", shy: "",
+  lsquo: "‘", rsquo: "’", sbquo: "‚", ldquo: "“", rdquo: "”", bdquo: "„", laquo: "«", raquo: "»",
+  ndash: "–", mdash: "—", hellip: "…",
+  szlig: "ß", aelig: "æ", oelig: "œ", oslash: "ø", eth: "ð", thorn: "þ",
+};
+// &eacute; and kin: fold1 drops the accent anyway, so the base letter is enough.
+const ACCENTED = /^([a-z])(acute|grave|circ|tilde|uml|ring|cedil|caron)$/i;
+const codePoint = (whole: string, code: number) => (code <= 0x10ffff ? String.fromCodePoint(code) : whole);
 
 /** Undoes the escapes that hide text in JSON, source maps, scripts, URLs and HTML. */
 function decodeEscapes(text: string): string {
   return text
+    .replace(/\\u\{([0-9a-fA-F]{1,6})\}/g, (whole, hex: string) => codePoint(whole, parseInt(hex, 16)))
     .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    // A minifier writes non-ASCII as \xF1 (j-1).
+    .replace(/\\x([0-9a-fA-F]{2})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/\\[nrt]/g, " ")
     .replace(/\\(["'/\\])/g, "$1")
     .replace(/(?:%[0-9a-fA-F]{2})+/g, (run) => {
@@ -116,11 +132,8 @@ function decodeEscapes(text: string): string {
       }
     })
     .replace(/&(?:#(\d+)|#x([0-9a-fA-F]+)|([a-z]+));/gi, (whole, dec?: string, hex?: string, name?: string) => {
-      if (dec || hex) {
-        const code = dec ? parseInt(dec, 10) : parseInt(hex!, 16);
-        return code <= 0x10ffff ? String.fromCodePoint(code) : whole;
-      }
-      return ENTITIES[name!.toLowerCase()] ?? whole;
+      if (dec || hex) return codePoint(whole, dec ? parseInt(dec, 10) : parseInt(hex!, 16));
+      return ENTITIES[name!.toLowerCase()] ?? ACCENTED.exec(name!)?.[1] ?? whole;
     });
 }
 
@@ -131,7 +144,7 @@ class View {
   readonly #where = new Map<string, number[]>();
 
   constructor(text: string) {
-    this.folded = fold1(text);
+    this.folded = fold1(text.replace(INVISIBLE, ""));
     this.#tokens = tokensOf(this.folded);
     this.#tokens.forEach((token, index) => {
       const list = this.#where.get(token);
@@ -142,6 +155,11 @@ class View {
 
   has(needle: string[]): boolean {
     return (this.#where.get(needle[0]!) ?? []).some((start) => needle.every((token, offset) => this.#tokens[start + offset] === token));
+  }
+
+  /** Every run of `length` tokens, joined by spaces. */
+  *runs(length: number): Generator<string> {
+    for (let index = 0; index + length <= this.#tokens.length; index++) yield this.#tokens.slice(index, index + length).join(" ");
   }
 }
 
@@ -161,11 +179,16 @@ function windows(tokens: string[]): string[][] {
 }
 
 function runsOf(text: string, markup: boolean): string[][] {
-  if (!markup) return windows(tokensOf(fold1(text)));
-  return [
-    ...windows(tokensOf(fold1(stripTags(withoutCode(text), " ")))),
-    ...attributeTexts(text).flatMap((value) => windows(tokensOf(fold1(value)))),
-  ];
+  // The payload's own escapes are decoded too, since a public copy may carry the plain characters (j-1).
+  const decoded = decodeEscapes(text).replace(INVISIBLE, "");
+  return (decoded === text ? [text] : [text, decoded]).flatMap((base) =>
+    markup
+      ? [
+          ...windows(tokensOf(fold1(stripTags(withoutCode(base), " ")))),
+          ...attributeTexts(base).flatMap((value) => windows(tokensOf(fold1(value)))),
+        ]
+      : windows(tokensOf(fold1(base))),
+  );
 }
 
 /** One rule: a hit of 3+ tokens or 16+ characters aborts; a shorter hit warns. */
@@ -179,6 +202,8 @@ export function scan(input: ScanInput): ScanResult {
 
   const needles = input.targets.flatMap((target) => {
     const folded = fold1(target.text);
+    // An empty value is in every file, and says nothing (j-13).
+    if (!folded) return [];
     if (allow.has(folded) || (target.path && pathAllowed(tokensOf(folded).join(" ")))) {
       result.allowed.push(target.label);
       return [];
@@ -191,6 +216,15 @@ export function scan(input: ScanInput): ScanResult {
       return [];
     }
     return [{ label: payload.label, runs: runsOf(payload.text, payload.markup ?? false).filter((run) => !runAllowed(run)) }];
+  });
+  // Every payload run, by length and text, so each file is read once rather than once per run (j-5).
+  const runIndex = new Map<number, Map<string, Set<number>>>();
+  payloads.forEach((payload, owner) => {
+    for (const run of payload.runs) {
+      const byText = runIndex.get(run.length) ?? runIndex.set(run.length, new Map()).get(run.length)!;
+      const key = run.join(" ");
+      (byText.get(key) ?? byText.set(key, new Set()).get(key)!).add(owner);
+    }
   });
 
   const sealedSizes = new Set(input.sealed.map((item) => item.bytes.length));
@@ -208,11 +242,17 @@ export function scan(input: ScanInput): ScanResult {
       const hit = (needle.tokens.length > 0 && found(needle.tokens)) || (substring && views.some((view) => view.folded.includes(needle.folded)));
       if (hit) report(needle.label, needle.tokens.length >= 3 || needle.folded.length >= 16);
     }
-    for (const payload of payloads) {
-      const run = payload.runs.find(found);
-      if (run) report(payload.label, run.length >= 3 || run.join(" ").length >= 16);
+    // Payload index → whether any hit aborts. One report per payload per file.
+    const hits = new Map<number, boolean>();
+    for (const [length, byText] of runIndex) {
+      for (const view of views) {
+        for (const run of view.runs(length)) {
+          for (const owner of byText.get(run) ?? []) hits.set(owner, hits.get(owner) === true || length >= 3 || run.length >= 16);
+        }
+      }
     }
-    if (/<web-threshold\b[^>]{0,500}\bsealed\b/.test(text) && /<script\b[^>]{0,500}\bsrc\s*=\s*["']?(https?:)?\/\//i.test(text)) {
+    for (const [owner, aborts] of hits) report(payloads[owner]!.label, aborts);
+    if (/<web-threshold\b[^>]{0,500}\bsealed\b/.test(text) && EXTERNAL_SCRIPT.test(text)) {
       result.warns.push(`${file} loads an external script beside a sealed gate; that script can see phrases and content`);
     }
   };
@@ -244,6 +284,8 @@ export function scan(input: ScanInput): ScanResult {
       result.aborts.push(`${file} has an unknown file type, so it can't be checked`);
       return;
     }
+    // A file's name is public too (j-10). The report names its folder, never the name itself (k-2).
+    check(`a file name in ${dirname(file) === "." ? "the top folder" : dirname(file)}`, file);
 
     try {
       // Only a file the same size as a secret can be a copy of it, so a huge video is never read.
@@ -253,7 +295,11 @@ export function scan(input: ScanInput): ScanResult {
 
       if (isCompressed) {
         result.counts.compressed++;
-        check(file, (ext === "gz" ? gunzipSync(bytes!) : brotliDecompressSync(bytes!)).toString("utf8"));
+        const inner = ext === "gz" ? gunzipSync(bytes!) : brotliDecompressSync(bytes!);
+        // A compressed copy of a sealed page is still a copy, however little text the scan sees in it (j-3).
+        const packed = sealedSizes.has(inner.length) ? sealedHashes.get(sha256(inner)) : undefined;
+        if (packed) result.aborts.push(`${file} is a compressed public copy of ${packed}`);
+        check(file, inner.toString("utf8"));
       } else if (isText) {
         result.counts.text++;
         check(file, bytes!.toString("utf8"));

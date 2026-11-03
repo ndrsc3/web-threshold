@@ -18,14 +18,19 @@ import {
   type OpenEntry,
   type SealedRecord,
 } from "../gate/sealed-format.js";
-import { scan } from "./scan.js";
+import { EXTERNAL_SCRIPT, scan, tokensOf } from "./scan.js";
 import { DEFAULT_SHELL, SHELL_MARKER, buildShell } from "./shell.js";
 
-const TEXT_TYPES = new Set(["text/html", "text/plain", "text/css", "text/markdown", "application/json", "image/svg+xml"]);
-// Wider than what's kept inline: anything readable as text must not leak as text.
-const isReadable = (type: string) => type.startsWith("text/") || type.endsWith("+xml") || type.endsWith("+json") || type === "application/json";
+// Whatever its declared type, a payload that reads as text is scanned as text (j-2).
+const asText = (bytes: Uint8Array): string | null => {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+};
+const saysText = (type: string) => type.startsWith("text/") || type.endsWith("+xml") || type.endsWith("+json") || type === "application/json";
 const isMarkup = (type: string) => type === "text/html" || type === "application/xhtml+xml" || type.endsWith("+xml") || type === "text/xml";
-const MAX_INLINE = 64 * 1024;
 const WARN_FILE = 2 * 1024 * 1024;
 const MAX_FILE = 10 * 1024 * 1024;
 const WARN_SLOTS = 256;
@@ -60,6 +65,8 @@ export interface SealOptions {
   log?: (line: string) => void;
   /** Test seam: replaces the sealing step, so a bad sealer can be shown to be caught. */
   build?: typeof buildBundle;
+  /** Test seam: the final rename, so a failure partway can be shown to leave the rerun guard (j-6). */
+  rename?: typeof renameSync;
 }
 
 class SealRefusal extends Error {}
@@ -192,30 +199,22 @@ function gitState(path: string): "tracked" | "untracked" | "not checked" {
 
 export interface Built {
   bundle: Bundle;
-  /** URL-loaded payloads: path inside --out to raw ciphertext. */
+  /** Payloads: path inside --out to raw ciphertext. */
   files: Map<string, Uint8Array>;
 }
 
 export async function buildBundle(file: DoorsFile, contents: Map<string, Uint8Array>): Promise<Built> {
-  // Pages always go to their own file: a shell shouldn't fetch every other page to open one.
+  // Every payload is its own file (j-9): the bundle stays small, and a page opens only what it asks for.
   const salt = randomBytes(16);
-  const inline: Bundle["inline"] = [];
   const files = new Map<string, Uint8Array>();
   const entries = new Map<string, OpenEntry>();
-  for (const [name, { type, page }] of Object.entries(file.payloads)) {
+  for (const [name, { type }] of Object.entries(file.payloads)) {
     const key = randomBytes(32);
-    const bytes = contents.get(name)!;
-    const sealed = await encrypt(key, bytes);
-    if (page === undefined && TEXT_TYPES.has(type) && bytes.length <= MAX_INLINE) {
-      const pid = toB64(randomBytes(9));
-      inline.push({ pid, ...sealed });
-      entries.set(name, { k: toB64(key), type, pid });
-    } else {
-      // A random name, listed only inside the records of doors that open it.
-      const path = `s/${toB64(randomBytes(12))}.sealed`;
-      files.set(path, fromB64(sealed.ct));
-      entries.set(name, { k: toB64(key), type, iv: sealed.iv, src: `/${path}` });
-    }
+    const sealed = await encrypt(key, contents.get(name)!);
+    // A random name, listed only inside the records of doors that open it.
+    const path = `s/${toB64(randomBytes(12))}.sealed`;
+    files.set(path, fromB64(sealed.ct));
+    entries.set(name, { k: toB64(key), type, iv: sealed.iv, src: `/${path}` });
   }
 
   const slots: Bundle["slots"] = [];
@@ -232,9 +231,7 @@ export async function buildBundle(file: DoorsFile, contents: Map<string, Uint8Ar
     const other = crypto.getRandomValues(new Uint32Array(1))[0]! % (index + 1);
     [slots[index], slots[other]] = [slots[other]!, slots[index]!];
   }
-  // Payload order must not reveal payload order either.
-  inline.sort((a, b) => (a.pid < b.pid ? -1 : 1));
-  return { bundle: { v: 1, kdf: { iter: ITERATIONS, salt: toB64(salt), norm: NORM }, slots, inline }, files };
+  return { bundle: { v: 1, kdf: { iter: ITERATIONS, salt: toB64(salt), norm: NORM }, slots }, files };
 }
 
 /** Each phrase opens exactly its declared payloads, byte-identical, and nothing else does. */
@@ -272,7 +269,7 @@ export async function verifyBundle(
     }
     for (const name of opened) {
       const entry = record.open[name]!;
-      const plain = await openEntry(bundle, entry, readFile);
+      const plain = await openEntry(entry, readFile);
       if (Buffer.compare(Buffer.from(plain), Buffer.from(contents.get(name)!)) !== 0) {
         throw new SealRefusal(`read-back: payload ${name} isn't byte-identical through door ${door.tier}`);
       }
@@ -290,7 +287,7 @@ export async function verifyBundle(
 }
 
 /** Every file is fully written beside its target before any target changes. */
-function commit(out: string, files: [string, string | Uint8Array][]): void {
+function commit(out: string, files: [string, string | Uint8Array][], rename: typeof renameSync = renameSync): void {
   const staged: { temp: string; target: string }[] = [];
   const cleanUp = () => {
     for (const { temp } of staged) rmSync(temp, { force: true });
@@ -309,7 +306,7 @@ function commit(out: string, files: [string, string | Uint8Array][]): void {
     throw new SealRefusal(`couldn't write ${path ? relative(out, path) : "the output"} (${code ?? "error"}). Nothing in --out was replaced`);
   }
   try {
-    for (const { temp, target } of staged) renameSync(temp, target);
+    for (const { temp, target } of staged) rename(temp, target);
   } catch (err) {
     cleanUp();
     throw new SealRefusal(`writing stopped partway (${(err as NodeJS.ErrnoException).code ?? "error"}), so --out is partly sealed. Rebuild the site before sealing again`);
@@ -356,12 +353,12 @@ async function sealInner(options: SealOptions, log: (line: string) => void): Pro
       throw new SealRefusal(`payload ${name}: ${payload.page} is already in --out, and a shell would replace it. Leave out "from" to seal it in place`);
     }
     if (payload.page !== undefined) confine(out, payload.page);
-    if (isReadable(payload.type)) {
-      try {
-        new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-      } catch {
-        log(`warning: payload ${name} isn't valid UTF-8, so the leak check can't read it and browsers may garble it`);
-      }
+    if (saysText(payload.type) && asText(bytes) === null) {
+      log(`warning: payload ${name} isn't valid UTF-8, so the leak check can't read it and browsers may garble it`);
+    }
+    // Once the page opens, such a script runs beside the door's key (j-12).
+    if (payload.page !== undefined && EXTERNAL_SCRIPT.test(bytes.toString("utf8"))) {
+      log(`warning: payload ${name} loads an external script, which can see what its door opens`);
     }
     contents.set(name, bytes);
     sealed.push({ label: `payload ${name}`, bytes });
@@ -394,8 +391,19 @@ async function sealInner(options: SealOptions, log: (line: string) => void): Pro
   const dataStrings = (value: unknown): string[] => {
     if (typeof value === "string") return [value];
     if (Array.isArray(value)) return value.flatMap(dataStrings);
-    if (typeof value === "object" && value !== null) return Object.values(value).flatMap(dataStrings);
+    // A key written as prose ships inside the record and is a secret too (j-10). Short keys such as
+    // `theme` are the handler's public vocabulary, and would warn on every build.
+    // Words as the scan counts them, so `the-hidden-room` is three (k-3).
+    const prose = (key: string) => tokensOf(fold1(key)).length >= 3;
+    if (typeof value === "object" && value !== null) {
+      return Object.entries(value).flatMap(([key, item]) => [...(prose(key) ? [key] : []), ...dataStrings(item)]);
+    }
     return [];
+  };
+  // A page's addresses: as a file, as a folder (folder/index.html), and without .html, as hosts with clean URLs serve it (j-13).
+  const addresses = (page: string): string[] => {
+    if (basename(page) === "index.html") return dirname(page) === "." ? [page] : [page, dirname(page)];
+    return [page, page.replace(/\.html$/, "")];
   };
   // The bundle is checked before it exists on disk, so a refusal leaves nothing behind.
   const result = scan({
@@ -408,21 +416,14 @@ async function sealInner(options: SealOptions, log: (line: string) => void): Pro
         ...dataStrings(door.data).map((text) => ({ label: `a data value of door ${door.tier}`, text })),
       ]),
       // A page sealed in place keeps its known address: only a hidden page's address is a secret.
-      ...pages.filter(([, payload]) => payload.from !== undefined).flatMap(([name, payload]) => [
-        { label: `the path of payload ${name}`, text: payload.page!, path: true },
-        // A page at folder/index.html is linked as /folder/.
-        ...(basename(payload.page!) === "index.html" && dirname(payload.page!) !== "."
-          ? [{ label: `the path of payload ${name}`, text: dirname(payload.page!), path: true }]
-          : []),
-      ]),
+      ...pages
+        .filter(([, payload]) => payload.from !== undefined)
+        .flatMap(([name, payload]) => addresses(payload.page!).map((text) => ({ label: `the path of payload ${name}`, text, path: true }))),
     ],
-    payloads: [...contents]
-      .filter(([name]) => isReadable(file.payloads[name]!.type))
-      .map(([name, bytes]) => ({
-        label: `text of payload ${name}`,
-        text: Buffer.from(bytes).toString("utf8"),
-        markup: isMarkup(file.payloads[name]!.type),
-      })),
+    payloads: [...contents].flatMap(([name, bytes]) => {
+      const text = asText(bytes);
+      return text === null ? [] : [{ label: `text of payload ${name}`, text, markup: isMarkup(file.payloads[name]!.type) }];
+    }),
     allowPublic: file.allowPublic,
     sealed,
   });
@@ -435,7 +436,7 @@ async function sealInner(options: SealOptions, log: (line: string) => void): Pro
     [BUNDLE_PATH, json],
     ...built.files,
     ...shells.map((shell): [string, string] => [shell.path, shell.html]),
-  ]);
+  ], options.rename);
   log(`sealed ${file.doors.length} doors, ${contents.size} payloads into ${BUNDLE_PATH}, ${built.files.size} files, ${shells.length} pages`);
   log(`scanned ${result.counts.text} text, ${result.counts.compressed} compressed, ${result.counts.binary} binary files`);
   log(`git: ${gitSummary}`);

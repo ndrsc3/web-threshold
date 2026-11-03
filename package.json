@@ -1,6 +1,6 @@
 {
   "name": "@ndrsc3/web-threshold",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "The Threshold — how anyone or anything comes in: a single-input, secret-to-tier entry gate as a Web Component (<web-threshold>), and a generated robots.txt from one config.",
   "license": "MIT",
   "type": "module",
