@@ -17,6 +17,10 @@ export type SecretMap = Record<string, TierName>;
 export interface TierUnlockedDetail {
     tier: TierName;
 }
+/** Payload of `threshold-error`: a fault, never a wrong phrase. */
+export interface ThresholdFaultDetail {
+    code: string;
+}
 export declare class WebThreshold extends HTMLElement {
     #private;
     static get observedAttributes(): string[];
@@ -24,10 +28,15 @@ export declare class WebThreshold extends HTMLElement {
     set secrets(map: SecretMap);
     get secrets(): SecretMap;
     connectedCallback(): void;
+    /** The sealed entry loads its bundle here. This entry can't open one. */
+    protected sealedAttached(): void;
+    protected emitFault(code: string): void;
     attributeChangedCallback(name: string, old: string | null, value: string | null): void;
     /**
      * Submit the current value, as pressing return would. The phone number pad
      * has no return key: set the `button` attribute, or wire your own button to this.
      */
     submit(): void;
+    /** What a submitted phrase does. The sealed entry overrides this. */
+    protected handlePhrase(value: string): void;
 }

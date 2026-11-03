@@ -1,26 +1,20 @@
-var y = (e) => {
+var v = (e) => {
   throw TypeError(e);
 };
-var b = (e, o, t) => o.has(e) || y("Cannot " + t);
-var i = (e, o, t) => (b(e, o, "read from private field"), t ? t.call(e) : o.get(e)), h = (e, o, t) => o.has(e) ? y("Cannot add the same private member more than once") : o instanceof WeakSet ? o.add(e) : o.set(e, t), m = (e, o, t, r) => (b(e, o, "write to private field"), r ? r.call(e, t) : o.set(e, t), t), c = (e, o, t) => (b(e, o, "access private method"), t);
-var l, n, a, v, f, p;
+var b = (e, o, t) => o.has(e) || v("Cannot " + t);
+var s = (e, o, t) => (b(e, o, "read from private field"), t ? t.call(e) : o.get(e)), h = (e, o, t) => o.has(e) ? v("Cannot add the same private member more than once") : o instanceof WeakSet ? o.add(e) : o.set(e, t), m = (e, o, t, r) => (b(e, o, "write to private field"), r ? r.call(e, t) : o.set(e, t), t), u = (e, o, t) => (b(e, o, "access private method"), t);
+var l, i, a, y, f, c;
 class w extends HTMLElement {
   constructor() {
     super(...arguments);
     h(this, a);
     h(this, l, {});
-    h(this, n, null);
-    h(this, p, (t) => {
-      var u;
+    h(this, i, null);
+    h(this, c, (t) => {
+      var n;
       t.preventDefault();
-      const r = (((u = i(this, n)) == null ? void 0 : u.value) ?? "").trim(), s = Object.hasOwn(i(this, l), r) ? i(this, l)[r] : void 0;
-      i(this, n) && (i(this, n).value = ""), s && this.dispatchEvent(
-        new CustomEvent("tier-unlocked", {
-          detail: { tier: s },
-          bubbles: !0,
-          composed: !0
-        })
-      );
+      const r = (((n = s(this, i)) == null ? void 0 : n.value) ?? "").trim();
+      s(this, i) && (s(this, i).value = ""), this.handlePhrase(r);
     });
   }
   static get observedAttributes() {
@@ -31,20 +25,29 @@ class w extends HTMLElement {
     m(this, l, t ?? {});
   }
   get secrets() {
-    return i(this, l);
+    return s(this, l);
   }
   connectedCallback() {
-    this.shadowRoot || c(this, a, v).call(this);
+    this.shadowRoot || (u(this, a, y).call(this), this.hasAttribute("sealed") && this.sealedAttached());
   }
-  attributeChangedCallback(t, r, s) {
+  /** The sealed entry loads its bundle here. This entry can't open one. */
+  sealedAttached() {
+    Promise.resolve().then(() => this.emitFault("sealed-needs-sealed-entry"));
+  }
+  emitFault(t) {
+    console.error(`web-threshold: ${t}`), this.dispatchEvent(
+      new CustomEvent("threshold-error", { detail: { code: t }, bubbles: !0, composed: !0 })
+    );
+  }
+  attributeChangedCallback(t, r, n) {
     var g;
-    if (!this.shadowRoot || r === s) return;
-    if (t === "placeholder" && i(this, n)) {
-      i(this, n).placeholder = s ?? "";
+    if (!this.shadowRoot || r === n) return;
+    if (t === "placeholder" && s(this, i)) {
+      s(this, i).placeholder = n ?? "";
       return;
     }
-    const u = ((g = i(this, n)) == null ? void 0 : g.value) ?? "";
-    c(this, a, f).call(this), i(this, n) && (i(this, n).value = u);
+    const p = ((g = s(this, i)) == null ? void 0 : g.value) ?? "";
+    u(this, a, f).call(this), s(this, i) && (s(this, i).value = p);
   }
   /**
    * Submit the current value, as pressing return would. The phone number pad
@@ -54,8 +57,23 @@ class w extends HTMLElement {
     var t, r;
     (r = (t = this.shadowRoot) == null ? void 0 : t.querySelector("form")) == null || r.requestSubmit();
   }
+  /** What a submitted phrase does. The sealed entry overrides this. */
+  handlePhrase(t) {
+    if (this.hasAttribute("sealed")) {
+      this.emitFault("sealed-needs-sealed-entry");
+      return;
+    }
+    const r = Object.hasOwn(s(this, l), t) ? s(this, l)[t] : void 0;
+    r && this.dispatchEvent(
+      new CustomEvent("tier-unlocked", {
+        detail: { tier: r },
+        bubbles: !0,
+        composed: !0
+      })
+    );
+  }
 }
-l = new WeakMap(), n = new WeakMap(), a = new WeakSet(), v = function() {
+l = new WeakMap(), i = new WeakMap(), a = new WeakSet(), y = function() {
   const t = this.attachShadow({ mode: "open" });
   t.innerHTML = `
       <style>
@@ -84,17 +102,17 @@ l = new WeakMap(), n = new WeakMap(), a = new WeakSet(), v = function() {
         }
       </style>
       <form part="form" autocomplete="off" novalidate></form>
-    `, t.querySelector("form").addEventListener("submit", i(this, p)), c(this, a, f).call(this);
+    `, t.querySelector("form").addEventListener("submit", s(this, c)), u(this, a, f).call(this);
 }, /** Build the form's contents from the current attributes. */
 f = function() {
-  const t = this.shadowRoot.querySelector("form"), r = this.getAttribute("label"), s = this.getAttribute("button"), u = this.getAttribute("inputmode") ?? "text";
+  const t = this.shadowRoot.querySelector("form"), r = this.getAttribute("label"), n = this.getAttribute("button"), p = this.getAttribute("inputmode") ?? "text";
   t.innerHTML = `
       ${r ? `<label part="label" for="threshold-input">${d(r)}</label>` : ""}
       <input
         part="input"
         id="threshold-input"
         type="text"
-        inputmode="${d(u)}"
+        inputmode="${d(p)}"
         name="threshold"
         placeholder="${d(this.getAttribute("placeholder") ?? "")}"
         ${r ? "" : 'aria-label="Enter a phrase to continue"'}
@@ -102,9 +120,9 @@ f = function() {
         autocorrect="off"
         spellcheck="false"
       />
-      ${s ? `<button part="button" type="submit">${d(s)}</button>` : ""}
-    `, m(this, n, t.querySelector("input"));
-}, p = new WeakMap();
+      ${n ? `<button part="button" type="submit">${d(n)}</button>` : ""}
+    `, m(this, i, t.querySelector("input"));
+}, c = new WeakMap();
 function d(e) {
   return e.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
