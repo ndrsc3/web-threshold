@@ -4,9 +4,9 @@ Status: active
 Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-encrypted-tiers.md`
 
 ## P1 — now
-- [ ] **v0.5 sealed mode: phone bench** `[GATE]` — slices 1 and 2 built, reviewed, and passing in Chromium, WebKit and Firefox; ▶ owner: open `bench.html` on a real phone over HTTPS; over 1 s returns to the owner
+- [ ] **v0.5 sealed mode: phone bench** `[GATE]` — all three slices built and passing in Chromium, WebKit and Firefox; ▶ owner: open `bench.html` on a real phone over HTTPS; over 1 s returns to the owner
   - plan: `docs/plans/261029-v0.5-encrypted-tiers.md` · design: `docs/plans/261102-v0.5-sealed-design.md`
-- [ ] **v0.5 sealed mode: slice 3** `[GATE]` — session memory in per-tab `sessionStorage`: a phrase on one page opens a section on another; a re-route arrives open
+- [ ] **Banana Rodeo: whole-site trial done, adoption later** `[GATE]` — owner 261102: revisit later. Open for it: pages in a public repo, its Vercel-hosted build, images stay public; a signed cookie is the alternative for a real lock
 
 ## P2 — next-up
 - [ ] **Confirm Vercel middleware cost and log retention** `[GUARD]` — every-request middleware at our traffic on Hobby, before committing to guard level 1

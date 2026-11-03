@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { execFileSync } from "node:child_process";
-import { closeSync, existsSync, ftruncateSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, ftruncateSync, linkSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
@@ -842,12 +842,14 @@ describe("sealed pages", () => {
     expect(report()).toContain("1 pages");
   });
 
-  it("the site bundle opens the page", async () => {
+  it("the site bundle opens the page, from its own file", async () => {
     write(doors());
     await seal2();
     const bundle = written();
+    expect(bundle.inline).toEqual([]);
     const [record] = await openSlots(bundle, await deriveKek(STRONG, fromB64(bundle.kdf.salt), bundle.kdf.iter));
-    expect(new TextDecoder().decode(await openPayload(bundle, record!.open.room!))).toBe(secret);
+    const plain = await openEntry(bundle, record!.open.room!, async (src) => new Uint8Array(readFileSync(join(out, src))));
+    expect(new TextDecoder().decode(plain)).toBe(secret);
   });
 
   it("stays small however many pages there are", async () => {
@@ -857,6 +859,7 @@ describe("sealed pages", () => {
     write({ payloads, doors: [{ tier: "k", phrase: STRONG, open: list }], allowPublic: [] });
     expect(await seal2()).toBe(0);
     expect(readFileSync(join(out, "s/p0/index.html")).length).toBeLessThan(5000);
+    expect(readFileSync(join(out, BUNDLE_PATH)).length).toBeLessThan(5000);
   });
 
   it("inlines the element so its text can't close the script", async () => {
@@ -906,6 +909,7 @@ describe("sealed pages", () => {
     site({ "s/room-7f3a9b/index.html": "<p>already here</p>" });
     expect(await seal2()).toBe(1);
     expect(report()).toContain("already in --out");
+    expect(report()).toContain("seal it in place");
     expect(readFileSync(shellPath(), "utf8")).toBe("<p>already here</p>");
   });
 
@@ -1150,5 +1154,184 @@ describe("the shell's handler (h-7)", () => {
     fail = false;
     await h.fire();
     expect(h.writes()).toBe(1);
+  });
+});
+
+describe("sealing built pages in place", () => {
+  const SECRET = "<html><body><h1>Members only</h1><p>Words nobody should read in the public source of this page.</p></body></html>";
+  const doors = () => ({
+    payloads: {
+      about: { type: "text/html", page: "pages/about.html" },
+      faq: { type: "text/html", page: "pages/faq.html" },
+    },
+    doors: [{ tier: "site", phrase: STRONG, open: ["about", "faq"] }],
+  });
+  const built = () => site({ "pages/about.html": SECRET, "pages/faq.html": SECRET.replace("Members", "Folks"), "index.html": "<p>the front</p>" });
+  const run = (extra: object = {}) => go({ element: "/* e */", ...extra });
+
+  it("replaces each page with a shell, and the page opens from its file", async () => {
+    built();
+    write(doors());
+    expect(await run()).toBe(0);
+    const shell = readFileSync(join(out, "pages/about.html"), "utf8");
+    expect(shell).toContain("<web-threshold");
+    expect(shell).not.toContain("Members only");
+    const bundle = written();
+    const [record] = await openSlots(bundle, await deriveKek(STRONG, fromB64(bundle.kdf.salt), bundle.kdf.iter));
+    const plain = await openEntry(bundle, record!.open.about!, async (src) => new Uint8Array(readFileSync(join(out, src))));
+    expect(new TextDecoder().decode(plain)).toBe(SECRET);
+  });
+
+  it("doesn't count the page itself as a leak, or a public copy", async () => {
+    built();
+    write(doors());
+    expect(await run()).toBe(0);
+    expect(report()).not.toContain("public copy");
+  });
+
+  it("still aborts on the page's text in a public file", async () => {
+    built();
+    site({ "other.html": "<p>Words nobody should read in the public source of this page.</p>" });
+    write(doors());
+    expect(await run()).toBe(1);
+    expect(report()).toContain("appears in other.html");
+    expect(readFileSync(join(out, "pages/about.html"), "utf8")).toBe(SECRET);
+  });
+
+  it("aborts on an unlisted copy of a page", async () => {
+    built();
+    site({ "backup.html": SECRET });
+    write(doors());
+    expect(await run()).toBe(1);
+    expect(report()).toContain("backup.html is a public copy");
+  });
+
+  it("doesn't treat the known address as a secret", async () => {
+    built();
+    site({ "index.html": '<a href="/pages/about.html">about</a>' });
+    write(doors());
+    expect(await run()).toBe(0);
+    expect(report()).not.toContain("the path of payload");
+  });
+
+  it("refuses a page that isn't there", async () => {
+    write(doors());
+    expect(await run()).toBe(1);
+    expect(report()).toContain("no file at pages/about.html");
+  });
+
+  it("refuses a page through a symlink out, without touching it", async () => {
+    const elsewhere = join(dir, "elsewhere");
+    mkdirSync(elsewhere);
+    writeFileSync(join(elsewhere, "about.html"), SECRET);
+    symlinkSync(elsewhere, join(out, "pages"));
+    write({ payloads: { about: { type: "text/html", page: "pages/about.html" } }, doors: [{ tier: "site", phrase: STRONG, open: ["about"] }] });
+    expect(await run()).toBe(1);
+    expect(report()).toContain("outside --out");
+    expect(readFileSync(join(elsewhere, "about.html"), "utf8")).toBe(SECRET);
+  });
+
+  it("refuses to overwrite a page tracked by git", async () => {
+    execFileSync("git", ["-C", dir, "init", "-q"], { stdio: "ignore" });
+    built();
+    write(doors());
+    execFileSync("git", ["-C", dir, "add", "dist/pages/about.html"], { stdio: "ignore" });
+    expect(await run()).toBe(1);
+    expect(report()).toContain("tracked by git");
+    expect(readFileSync(join(out, "pages/about.html"), "utf8")).toBe(SECRET);
+  });
+
+  it("needs a page or a from", async () => {
+    write({ payloads: { a: { type: "text/plain" } }, doors: [{ tier: "t", phrase: STRONG, open: ["a"] }] });
+    expect(await run()).toBe(1);
+    expect(report()).toContain('needs a "from" path, or a "page"');
+  });
+});
+
+describe("remember in the doors file", () => {
+  const page = () => ({ payloads: { p: { from: source("p.html", "<p>x</p>"), type: "text/html", page: "s/p/index.html" } }, doors: [{ tier: "t", phrase: STRONG, open: ["p"] }] });
+
+  it("writes it onto shells", async () => {
+    write({ ...page(), remember: "session" });
+    expect(await go({ element: "/* e */" })).toBe(0);
+    expect(readFileSync(join(out, "s/p/index.html"), "utf8")).toContain('remember="session"');
+  });
+
+  it("leaves it off by default", async () => {
+    write(page());
+    expect(await go({ element: "/* e */" })).toBe(0);
+    expect(readFileSync(join(out, "s/p/index.html"), "utf8")).not.toContain("remember=");
+  });
+
+  it("refuses another value", async () => {
+    write({ ...page(), remember: "forever" });
+    expect(await go({ element: "/* e */" })).toBe(1);
+    expect(report()).toContain('remember can only be "session"');
+  });
+});
+
+describe("in-place safety (i-1, i-2)", () => {
+  const SECRET = "<html><body><p>Words nobody should read in the public source of this page.</p></body></html>";
+  const one = () => ({ payloads: { p: { type: "text/html", page: "page.html" } }, doors: [{ tier: "t", phrase: STRONG, open: ["p"] }] });
+  const run = () => go({ element: "/* e */" });
+
+  it("refuses a page that's a symlink, leaving its target alone", async () => {
+    const outside = join(dir, "outside.html");
+    writeFileSync(outside, SECRET);
+    symlinkSync(outside, join(out, "page.html"));
+    write(one());
+    expect(await run()).toBe(1);
+    expect(report()).toContain("page.html is a symlink");
+    expect(readFileSync(outside, "utf8")).toBe(SECRET);
+  });
+
+  it("replaces a hard link's name, not the file it shares", async () => {
+    const outside = join(dir, "outside.html");
+    writeFileSync(outside, SECRET);
+    linkSync(outside, join(out, "page.html"));
+    write(one());
+    expect(await run()).toBe(0);
+    expect(readFileSync(outside, "utf8")).toBe(SECRET);
+    expect(readFileSync(join(out, "page.html"), "utf8")).toContain("<web-threshold");
+  });
+
+  it("refuses to seal its own shell, after the bundle is gone", async () => {
+    site({ "page.html": SECRET });
+    write(one());
+    expect(await run()).toBe(0);
+    rmSync(join(out, "s"), { recursive: true });
+    expect(await run()).toBe(1);
+    expect(report()).toContain("already a shell from an earlier run");
+  });
+
+  it("a read-only page doesn't stop the run or leave it half done", async () => {
+    site({ "page.html": SECRET, "two.html": SECRET.replace("nobody", "somebody") });
+    chmodSync(join(out, "page.html"), 0o444);
+    write({ payloads: { p: { type: "text/html", page: "page.html" }, q: { type: "text/html", page: "two.html" } }, doors: [{ tier: "t", phrase: STRONG, open: ["p", "q"] }] });
+    expect(await run()).toBe(0);
+    expect(readFileSync(join(out, "two.html"), "utf8")).toContain("<web-threshold");
+    expect(readFileSync(join(out, "page.html"), "utf8")).toContain("<web-threshold");
+  });
+
+  it("a folder it can't write to changes nothing, and says so", async () => {
+    site({ "one.html": SECRET, "locked/two.html": SECRET.replace("nobody", "somebody") });
+    write({ payloads: { p: { type: "text/html", page: "one.html" }, q: { type: "text/html", page: "locked/two.html" } }, doors: [{ tier: "t", phrase: STRONG, open: ["p", "q"] }] });
+    chmodSync(join(out, "locked"), 0o555);
+    try {
+      expect(await run()).toBe(1);
+    } finally {
+      chmodSync(join(out, "locked"), 0o755);
+    }
+    expect(report()).toContain("Nothing in --out was replaced");
+    expect(readFileSync(join(out, "one.html"), "utf8")).toBe(SECRET);
+    expect(existsSync(join(out, BUNDLE_PATH))).toBe(false);
+    expect(execFileSync("find", [out, "-name", ".seal-*"]).toString()).toBe("");
+  });
+
+  it("leaves no temporary files after a good run", async () => {
+    site({ "page.html": SECRET });
+    write(one());
+    expect(await run()).toBe(0);
+    expect(execFileSync("find", [out, "-name", ".seal-*"]).toString()).toBe("");
   });
 });

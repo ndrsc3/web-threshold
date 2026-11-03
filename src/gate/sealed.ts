@@ -6,6 +6,7 @@ import {
   openEntry,
   openSlots,
   parseBundle,
+  toB64,
   type Bundle,
   type SealedRecord,
 } from "./sealed-format.js";
@@ -18,7 +19,11 @@ export interface SealedUnlockedDetail extends TierUnlockedDetail {
   /** The payload names this door opens. */
   names: string[];
   open(name: string): Promise<Blob>;
+  /** True when this came from session memory, not typing. A route handler skips these, or a reload loops. */
+  replayed?: boolean;
 }
+
+const MEMORY_KEY = "web-threshold:keys";
 
 /**
  * <web-threshold sealed="#bundle"> or sealed="/s/site.json": a phrase opens a record
@@ -26,7 +31,25 @@ export interface SealedUnlockedDetail extends TierUnlockedDetail {
  */
 export class SealedThreshold extends WebThreshold {
   #load: Promise<Bundle | null> | null = null;
+  #replays: SealedUnlockedDetail[] = [];
   #busy = false;
+
+  /**
+   * A listener can attach after a replay: on a sealed page the element upgrades as the page
+   * is written, before the page's own module runs. It still hears what it missed. A listener
+   * further up, on `document`, has to be there first.
+   */
+  override addEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void {
+    super.addEventListener(type, listener, options);
+    if (type !== "tier-unlocked") return;
+    for (const detail of this.#replays) {
+      queueMicrotask(() => {
+        const event = new CustomEvent("tier-unlocked", { detail });
+        if (typeof listener === "function") listener.call(this, event);
+        else listener.handleEvent(event);
+      });
+    }
+  }
 
   protected override sealedAttached(): void {
     this.#load = this.#loadBundle();
@@ -38,10 +61,49 @@ export class SealedThreshold extends WebThreshold {
       if (!globalThis.crypto?.subtle) throw new BundleError("no-webcrypto");
       const bundle = parseBundle(await this.#readSource(this.getAttribute("sealed") ?? ""));
       if (Object.keys(this.secrets).length > 0) this.emitFault("both-modes");
+      else if (this.#remembers()) await this.#replay(bundle);
       return bundle;
     } catch (err) {
       this.emitFault(err instanceof BundleError ? err.code : "malformed-bundle");
       return null;
+    }
+  }
+
+  #remembers(): boolean {
+    const value = this.getAttribute("remember");
+    if (value === "session") return true;
+    if (value !== null) this.emitFault("unsupported-remember");
+    return false;
+  }
+
+  /** Keys that opened a slot, per tab. Never a phrase. Storage failing only means retyping. */
+  #storedKeys(): string[] {
+    try {
+      const stored: unknown = JSON.parse(sessionStorage.getItem(MEMORY_KEY) ?? "[]");
+      return Array.isArray(stored) ? stored.filter((item): item is string => typeof item === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+
+  #keep(kek: Uint8Array): void {
+    if (this.getAttribute("remember") !== "session") return;
+    try {
+      const keys = new Set(this.#storedKeys()).add(toB64(kek));
+      sessionStorage.setItem(MEMORY_KEY, JSON.stringify([...keys]));
+    } catch {
+      // Retyping is the fallback.
+    }
+  }
+
+  /** Stale keys from an earlier build simply open nothing. */
+  async #replay(bundle: Bundle): Promise<void> {
+    for (const stored of this.#storedKeys()) {
+      try {
+        for (const record of await openSlots(bundle, fromB64(stored))) this.#unlock(bundle, record, true);
+      } catch {
+        // A damaged entry opens nothing.
+      }
     }
   }
 
@@ -90,8 +152,10 @@ export class SealedThreshold extends WebThreshold {
       if (!bundle) return;
       const kek = await deriveKek(value, fromB64(bundle.kdf.salt), bundle.kdf.iter);
       const [record] = await openSlots(bundle, kek);
-      if (record) this.#unlock(bundle, record);
-      else if (this.hasAttribute("report-wrong")) {
+      if (record) {
+        this.#keep(kek);
+        this.#unlock(bundle, record);
+      } else if (this.hasAttribute("report-wrong")) {
         this.dispatchEvent(new CustomEvent("tier-rejected", { bubbles: true, composed: true }));
       }
     } catch {
@@ -101,11 +165,12 @@ export class SealedThreshold extends WebThreshold {
     }
   }
 
-  #unlock(bundle: Bundle, record: SealedRecord): void {
+  #unlock(bundle: Bundle, record: SealedRecord, replayed = false): void {
     const detail: SealedUnlockedDetail = {
       tier: record.tier,
       data: record.data,
       names: Object.keys(record.open),
+      ...(replayed ? { replayed } : {}),
       open: async (name) => {
         if (!Object.hasOwn(record.open, name)) throw new Error(`this door doesn't open "${name}"`);
         const entry = record.open[name]!;
@@ -118,6 +183,7 @@ export class SealedThreshold extends WebThreshold {
         }
       },
     };
+    if (replayed) this.#replays.push(detail);
     this.dispatchEvent(new CustomEvent("tier-unlocked", { detail, bubbles: true, composed: true }));
   }
 

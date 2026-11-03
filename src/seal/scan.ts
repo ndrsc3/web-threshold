@@ -32,6 +32,8 @@ export interface ScanInput {
   root: string;
   /** Files about to be written, checked as if they were already there. */
   staged: { file: string; text: string }[];
+  /** Built pages about to be replaced by shells: not public once this run finishes. */
+  replaced?: string[];
   targets: Target[];
   /** Checked as 8-token windows, or whole if shorter, and reported once per file. */
   payloads: Target[];
@@ -215,8 +217,10 @@ export function scan(input: ScanInput): ScanResult {
     }
   };
 
+  const replaced = new Set(input.replaced ?? []);
   const visit = (path: string, seen: Set<string>): void => {
     const file = relative(input.root, path);
+    if (replaced.has(file)) return;
     let size: number;
     try {
       const stat = statSync(path); // follows symlinks: their targets are published too

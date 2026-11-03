@@ -43,7 +43,7 @@ async function runEngine(name, engine) {
   const browser = await engine.launch();
   const errors = [];
   try {
-    const page = await browser.newPage();
+    const page = await (await browser.newContext()).newPage();
     page.on("pageerror", (err) => errors.push(`page error: ${err.message}`));
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(`console: ${message.text()}`);
@@ -84,19 +84,52 @@ async function runEngine(name, engine) {
     if (drawn !== 32) throw new Error(`the sealed image didn't draw: width ${drawn}`);
     if (!(await page.locator("#figure").getAttribute("src")).startsWith("blob:")) throw new Error("the image didn't come from a blob");
 
-    // A re-route, then a whole page behind its own door.
+    // Portions of a site: the fox's phrase, typed on the first page, opens a section on the second.
+    await page.goto(`${base}/second.html`);
+    await waitFor("#section", "third stone");
+    expectText(await text("#state"), "Remembered", "second page");
+    await page.reload();
+    await waitFor("#section", "third stone");
+
+    // A re-route to a sealed page arrives open, and a reload there stays open without looping.
+    await page.goto(`${base}/`);
     await enter(page, "the inner room waits");
     await page.waitForURL("**/s/inner-room-7f3a9b/");
-    const shell = await (await page.request.get(page.url())).text();
-    if (shell.includes("existed nowhere") || shell.includes("The inner room")) throw new Error("the sealed page is in its shell");
-    await enter(page, "a wrong phrase here");
-    await enter(page, "THE INNER ROOM WAITS");
     await page.locator("h1", { hasText: "The inner room" }).waitFor();
     expectText(await text("#ran"), "Its own script ran", "sealed page script");
+    // Its own element upgrades before its module listens, and still hears the fox.
+    await waitFor("#remembered", "fox's door");
     expectText(await page.title(), "The inner room", "sealed page title");
+    const shell = await (await page.request.get(page.url())).text();
+    if (shell.includes("existed nowhere") || shell.includes("The inner room")) throw new Error("the sealed page is in its shell");
     await page.reload();
-    await page.locator("web-threshold input").waitFor();
-    if (await page.locator("h1", { hasText: "The inner room" }).count()) throw new Error("a reload kept the sealed page open");
+    await page.locator("h1", { hasText: "The inner room" }).waitFor();
+    await waitFor("#remembered", "fox's door");
+
+    // A plain new tab in the same browser starts fresh.
+    const tab = await page.context().newPage();
+    await tab.goto(`${base}/s/inner-room-7f3a9b/`);
+    await tab.locator("web-threshold input").waitFor();
+    await tab.waitForTimeout(300);
+    if (await tab.locator("h1", { hasText: "The inner room" }).count()) throw new Error("a new tab found the page open");
+    await tab.close();
+
+    await page.goto(`${base}/`);
+    await page.waitForTimeout(500);
+    if (new URL(page.url()).pathname !== "/") throw new Error(`a replay re-routed the first page to ${page.url()}`);
+
+    // Another browser session: the door is shut, and its phrase opens it.
+    const fresh = await (await browser.newContext()).newPage();
+    await fresh.goto(`${base}/s/inner-room-7f3a9b/`);
+    await fresh.locator("web-threshold input").waitFor();
+    await fresh.waitForTimeout(300);
+    if (await fresh.locator("h1", { hasText: "The inner room" }).count()) throw new Error("a fresh session found the page open");
+    await enter(fresh, "a wrong phrase here");
+    await enter(fresh, "THE INNER ROOM WAITS");
+    await fresh.locator("h1", { hasText: "The inner room" }).waitFor();
+    await fresh.goto(`${base}/second.html`);
+    await fresh.waitForTimeout(300);
+    if (!(await fresh.locator("#section").isHidden())) throw new Error("a door opened in another session");
 
     await page.goto(`${base}/bench.html`);
     await page.locator("#go").click();

@@ -13,7 +13,16 @@
     <h1>The inner room</h1>
     <p>This whole page was sealed. Its public address serves only a door, and these words existed nowhere on the host until the phrase opened them.</p>
     <p id="ran"></p>
+    <p id="remembered"></p>
+    <web-threshold sealed="/s/site.json" remember="session" hidden></web-threshold>
     <script>document.getElementById("ran").textContent = "Its own script ran after opening.";</script>
+    <script type="module">
+      import "/web-threshold-sealed.js";
+      // The element is already upgraded by now, so this attaches after any replay.
+      document.querySelector("web-threshold").addEventListener("tier-unlocked", ({ detail }) => {
+        if (detail.tier === "fox") document.getElementById("remembered").textContent = "The fox's door is open here too.";
+      });
+    </script>
     <p><a href="/">Back to the threshold</a></p>
   </body>
 </html>

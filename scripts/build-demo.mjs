@@ -17,6 +17,7 @@ if (!existsSync(join(root, "dist/web-threshold-sealed.js"))) {
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out);
 copyFileSync(join(root, "demo/sealed.html"), join(out, "index.html"));
+copyFileSync(join(root, "demo/second.html"), join(out, "second.html"));
 copyFileSync(join(root, "demo/bench.html"), join(out, "bench.html"));
 copyFileSync(join(root, "demo/golden.html"), join(out, "golden.html"));
 copyFileSync(join(root, "src/gate/__golden__/v1.json"), join(out, "golden.json"));

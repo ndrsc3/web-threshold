@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Threshold — the second page</title>
+    <style>
+      body { font-family: Georgia, "Times New Roman", serif; max-width: 34rem; margin: 0 auto; padding: 3rem 1rem; line-height: 1.5; background: #f2ebc9; color: #454f1c; }
+      web-threshold { margin: 2rem 0 1rem; color: #c77d40; font-size: 1.25rem; }
+      web-threshold[busy] { opacity: 0.5; }
+      #section { white-space: pre-wrap; border-left: 2px solid #c77d40; padding-left: 1em; font: inherit; }
+      a { color: #c77d40; }
+    </style>
+  </head>
+  <body>
+    <h1>The second page</h1>
+    <p id="state">A section of this page opens with the fox's phrase, typed here or on the first page.</p>
+    <pre id="section" hidden></pre>
+    <web-threshold sealed="/s/site.json" remember="session" label="Speak the phrase" button="Enter" placeholder="…"></web-threshold>
+    <p><a href="/">Back to the first page</a></p>
+    <script type="module">
+      import "/web-threshold-sealed.js";
+      const section = document.getElementById("section");
+      document.querySelector("web-threshold").addEventListener("tier-unlocked", async ({ detail }) => {
+        if (!detail.names.includes("fox")) return;
+        section.textContent = await (await detail.open("fox")).text();
+        section.hidden = false;
+        document.getElementById("state").textContent = detail.replayed ? "Remembered from earlier in this tab." : "Opened here.";
+      });
+    </script>
+  </body>
+</html>

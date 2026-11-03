@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   ITERATIONS,
@@ -41,9 +41,12 @@ export interface Door {
 }
 
 export interface DoorsFile {
-  payloads: Record<string, { from: string; type: string; page?: string }>;
+  /** No `from` means seal the built page already at `page`, in place. */
+  payloads: Record<string, { from?: string; type: string; page?: string }>;
   doors: Door[];
   allowPublic: string[];
+  /** Written onto shells. Pages of a site's own use the attribute. */
+  remember?: "session";
 }
 
 export interface SealOptions {
@@ -84,8 +87,9 @@ function unknownKeys(where: string, value: object, known: string[], errors: stri
 export function validateDoors(raw: unknown): DoorsFile {
   const errors: string[] = [];
   if (typeof raw !== "object" || raw === null) throw new SealRefusal("the doors file must be a JSON object");
-  const file = raw as { payloads?: unknown; doors?: unknown; allowPublic?: unknown };
-  unknownKeys("doors file", file, ["payloads", "doors", "allowPublic"], errors);
+  const file = raw as { payloads?: unknown; doors?: unknown; allowPublic?: unknown; remember?: unknown };
+  unknownKeys("doors file", file, ["payloads", "doors", "allowPublic", "remember"], errors);
+  if (file.remember !== undefined && file.remember !== "session") errors.push('remember can only be "session"');
 
   const payloads = (typeof file.payloads === "object" && file.payloads !== null ? file.payloads : {}) as Record<string, Record<string, unknown>>;
   const seenPages = new Set<string>();
@@ -95,7 +99,9 @@ export function validateDoors(raw: unknown): DoorsFile {
       continue;
     }
     unknownKeys(`payload ${name}`, payload, ["from", "type", "page"], errors);
-    if (typeof payload.from !== "string") errors.push(`payload ${name}: needs a "from" path`);
+    if (typeof payload.from !== "string" && !(payload.from === undefined && payload.page !== undefined)) {
+      errors.push(`payload ${name}: needs a "from" path, or a "page" to seal in place`);
+    }
     if (typeof payload.type !== "string") errors.push(`payload ${name}: needs a "type"`);
     else if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(payload.type)) errors.push(`payload ${name}: "${payload.type}" isn't a media type`);
     else payload.type = payload.type.toLowerCase();
@@ -147,11 +153,17 @@ export function validateDoors(raw: unknown): DoorsFile {
     if (payload?.page !== undefined && !opened.has(name)) errors.push(`payload ${name}: no door opens this page, so its shell would be a dead end`);
   }
   if (errors.length > 0) throw new SealRefusal(errors.join("\n"));
-  return { payloads, doors, allowPublic } as unknown as DoorsFile;
+  return { payloads, doors, allowPublic, ...(file.remember ? { remember: file.remember } : {}) } as unknown as DoorsFile;
 }
 
 /** A write target must land inside --out, whatever symlinks are on the way, and its folders must be folders. */
 function confine(out: string, target: string): void {
+  try {
+    if (lstatSync(join(out, target)).isSymbolicLink()) throw new SealRefusal(`${target} is a symlink, and writing through it could leave --out`);
+  } catch (err) {
+    if (err instanceof SealRefusal) throw err;
+    // Not there yet, which is fine.
+  }
   let ancestor = dirname(join(out, target));
   while (!existsSync(ancestor)) ancestor = dirname(ancestor);
   if (!isInside(ancestor, out)) throw new SealRefusal(`${target} would be written outside --out, through a symlink`);
@@ -185,15 +197,16 @@ export interface Built {
 }
 
 export async function buildBundle(file: DoorsFile, contents: Map<string, Uint8Array>): Promise<Built> {
+  // Pages always go to their own file: a shell shouldn't fetch every other page to open one.
   const salt = randomBytes(16);
   const inline: Bundle["inline"] = [];
   const files = new Map<string, Uint8Array>();
   const entries = new Map<string, OpenEntry>();
-  for (const [name, { type }] of Object.entries(file.payloads)) {
+  for (const [name, { type, page }] of Object.entries(file.payloads)) {
     const key = randomBytes(32);
     const bytes = contents.get(name)!;
     const sealed = await encrypt(key, bytes);
-    if (TEXT_TYPES.has(type) && bytes.length <= MAX_INLINE) {
+    if (page === undefined && TEXT_TYPES.has(type) && bytes.length <= MAX_INLINE) {
       const pid = toB64(randomBytes(9));
       inline.push({ pid, ...sealed });
       entries.set(name, { k: toB64(key), type, pid });
@@ -276,6 +289,33 @@ export async function verifyBundle(
   if (files.size > read.size + unopened) throw new SealRefusal("read-back: a sealed file no door opens");
 }
 
+/** Every file is fully written beside its target before any target changes. */
+function commit(out: string, files: [string, string | Uint8Array][]): void {
+  const staged: { temp: string; target: string }[] = [];
+  const cleanUp = () => {
+    for (const { temp } of staged) rmSync(temp, { force: true });
+  };
+  try {
+    for (const [path, content] of files) {
+      const target = join(out, path);
+      mkdirSync(dirname(target), { recursive: true });
+      const temp = join(dirname(target), `.seal-${toB64(randomBytes(9))}`);
+      staged.push({ temp, target });
+      writeFileSync(temp, content);
+    }
+  } catch (err) {
+    cleanUp();
+    const { code, path } = err as NodeJS.ErrnoException;
+    throw new SealRefusal(`couldn't write ${path ? relative(out, path) : "the output"} (${code ?? "error"}). Nothing in --out was replaced`);
+  }
+  try {
+    for (const { temp, target } of staged) renameSync(temp, target);
+  } catch (err) {
+    cleanUp();
+    throw new SealRefusal(`writing stopped partway (${(err as NodeJS.ErrnoException).code ?? "error"}), so --out is partly sealed. Rebuild the site before sealing again`);
+  }
+}
+
 async function sealInner(options: SealOptions, log: (line: string) => void): Promise<void> {
   const out = resolve(options.out);
   const doorsPath = resolve(options.doors);
@@ -297,16 +337,23 @@ async function sealInner(options: SealOptions, log: (line: string) => void): Pro
   const contents = new Map<string, Uint8Array>();
   const sealed = [{ label: "the doors file", bytes: readFileSync(doorsPath) as Uint8Array }];
   const sources: string[] = [doorsPath];
+  const inPlace: string[] = [];
   for (const [name, payload] of Object.entries(file.payloads)) {
-    const from = resolve(dirname(doorsPath), payload.from);
-    if (isInside(from, out)) throw new SealRefusal(`payload ${name}: its source is inside --out`);
-    if (!existsSync(from)) throw new SealRefusal(`payload ${name}: no file at ${payload.from}`);
-    if (!statSync(from).isFile()) throw new SealRefusal(`payload ${name}: ${payload.from} isn't a file`);
+    if (payload.from === undefined) inPlace.push(payload.page!);
+    const shown = payload.from ?? payload.page!;
+    const from = payload.from === undefined ? join(out, payload.page!) : resolve(dirname(doorsPath), payload.from);
+    if (payload.from !== undefined && isInside(from, out)) throw new SealRefusal(`payload ${name}: its source is inside --out`);
+    if (!existsSync(from)) throw new SealRefusal(`payload ${name}: no file at ${shown}`);
+    if (!statSync(from).isFile()) throw new SealRefusal(`payload ${name}: ${shown} isn't a file`);
     const bytes = readFileSync(from);
+    // A leftover shell sealed as a page would open a shell, for ever. It can only come from an earlier run.
+    if (payload.page !== undefined && /<web-threshold\b[^>]{0,500}\bsealed\b[^>]{0,500}\bdata-open\b/.test(bytes.toString("utf8"))) {
+      throw new SealRefusal(`payload ${name}: ${shown} is already a shell from an earlier run. Rebuild the site first`);
+    }
     if (bytes.length > MAX_FILE) throw new SealRefusal(`payload ${name}: over the 10 MiB limit`);
     if (bytes.length > WARN_FILE) log(`warning: payload ${name} is over 2 MiB, which a phone holds twice in memory while opening it`);
-    if (payload.page !== undefined && existsSync(join(out, payload.page))) {
-      throw new SealRefusal(`payload ${name}: ${payload.page} is already in --out, and a shell would replace it. Rebuild the site if it's left from an earlier run`);
+    if (payload.from !== undefined && payload.page !== undefined && existsSync(join(out, payload.page))) {
+      throw new SealRefusal(`payload ${name}: ${payload.page} is already in --out, and a shell would replace it. Leave out "from" to seal it in place`);
     }
     if (payload.page !== undefined) confine(out, payload.page);
     if (isReadable(payload.type)) {
@@ -340,7 +387,7 @@ async function sealInner(options: SealOptions, log: (line: string) => void): Pro
   const template = options.shell ? readFileSync(resolve(options.shell), "utf8") : DEFAULT_SHELL;
   if (pages.length > 0 && !options.element) throw new SealRefusal("sealed pages need the built element: run `npm run build` in web-threshold");
   if (pages.length > 0 && template.split(SHELL_MARKER).length !== 2) throw new SealRefusal(`the shell must contain ${SHELL_MARKER} exactly once`);
-  const shells = pages.map(([name, payload]) => ({ path: payload.page!, ...buildShell(template, `/${BUNDLE_PATH}`, name, options.element ?? "") }));
+  const shells = pages.map(([name, payload]) => ({ path: payload.page!, ...buildShell(template, `/${BUNDLE_PATH}`, name, options.element ?? "", file.remember) }));
   confine(out, BUNDLE_PATH);
   for (const path of built.files.keys()) confine(out, path);
 
@@ -353,13 +400,15 @@ async function sealInner(options: SealOptions, log: (line: string) => void): Pro
   // The bundle is checked before it exists on disk, so a refusal leaves nothing behind.
   const result = scan({
     root: out,
+    replaced: inPlace,
     staged: [{ file: BUNDLE_PATH, text: json }, ...shells.map((shell) => ({ file: shell.path, text: shell.publicText }))],
     targets: [
       ...file.doors.flatMap((door) => [
         { label: `the phrase of door ${door.tier}`, text: door.phrase },
         ...dataStrings(door.data).map((text) => ({ label: `a data value of door ${door.tier}`, text })),
       ]),
-      ...pages.flatMap(([name, payload]) => [
+      // A page sealed in place keeps its known address: only a hidden page's address is a secret.
+      ...pages.filter(([, payload]) => payload.from !== undefined).flatMap(([name, payload]) => [
         { label: `the path of payload ${name}`, text: payload.page!, path: true },
         // A page at folder/index.html is linked as /folder/.
         ...(basename(payload.page!) === "index.html" && dirname(payload.page!) !== "."
@@ -381,13 +430,12 @@ async function sealInner(options: SealOptions, log: (line: string) => void): Pro
   for (const warn of result.warns) log(`warning: ${warn}`);
   if (result.aborts.length > 0) throw new SealRefusal(`found in public output, nothing written:\n${result.aborts.join("\n")}`);
 
-  mkdirSync(join(out, "s"), { recursive: true });
-  for (const [path, bytes] of built.files) writeFileSync(join(out, path), bytes);
-  for (const shell of shells) {
-    mkdirSync(dirname(join(out, shell.path)), { recursive: true });
-    writeFileSync(join(out, shell.path), shell.html);
-  }
-  writeFileSync(join(out, BUNDLE_PATH), json);
+  // The bundle goes first: if anything after it fails, the rerun guard says to rebuild.
+  commit(out, [
+    [BUNDLE_PATH, json],
+    ...built.files,
+    ...shells.map((shell): [string, string] => [shell.path, shell.html]),
+  ]);
   log(`sealed ${file.doors.length} doors, ${contents.size} payloads into ${BUNDLE_PATH}, ${built.files.size} files, ${shells.length} pages`);
   log(`scanned ${result.counts.text} text, ${result.counts.compressed} compressed, ${result.counts.binary} binary files`);
   log(`git: ${gitSummary}`);

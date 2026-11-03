@@ -48,7 +48,7 @@ Plain HTML, no build step:
 
 ## Sealed mode: the entry point to a labyrinth
 
-Unreleased, in progress for v0.5. A phrase opens a sealed record of keys plus free-form data of your own, and the element hands it to your page as an event. Nothing it opens is readable in the page's source, on a plain static host.
+Unreleased, planned for v0.5. A phrase opens a sealed record of keys plus free-form data of your own, and the element hands it to your page as an event. Nothing it opens is readable in the page's source, on a plain static host.
 
 **1. Write a doors file.** This is the config and the mapping: each door says what its phrase opens, and what data your page receives. Keep it out of git and out of your build output, because it holds the phrases.
 
@@ -101,7 +101,7 @@ This writes `dist/s/site.json`, proves each phrase opens exactly its own payload
 - The build check skips the bodies of `<style>` and executable `<script>` in sealed pages, which usually match the public site's, so it won't notice a secret written in them leaking elsewhere. Boilerplate of 8+ words in a sealed page's visible text or long attributes, such as a shared footer, stops the build until you list it in `allowPublic`.
 - A sealed page with an import map fails in Firefox, because the shell's own module already ran. Sealed pages should use ordinary script URLs.
 - A sealed page's address, and its payload name, are public. Only the content is protected, and a phrase can't be revoked once a copy of the bundle is out.
-- Not yet: remembering unlocks across pages, so a re-route to a sealed page asks for its phrase there.
+- Remembered unlocks last for one tab. A plain new tab starts fresh and retypes. Page scripts can read the stored key, but it only opens that phrase's door, and it never reveals the phrase.
 
 **Images and files.** Any payload with a non-text type, or text over 64 KiB, becomes a pure-ciphertext file at a random name, listed only inside the doors that open it. `detail.open(name)` fetches it on request and returns a `Blob`, so an image is `img.src = URL.createObjectURL(blob)`.
 
@@ -111,7 +111,15 @@ This writes `dist/s/site.json`, proves each phrase opens exactly its own payload
 { "from": "private/room.html", "type": "text/html", "page": "s/room-7f3a9b/index.html" }
 ```
 
-`--shell shell.html` uses your own template for the shell, which must contain `<!--web-threshold-->` exactly once. The shell fetches `/s/site.json`, so every page in a site shares one bundle. Reloading shows the door again. Keep the path random, and don't link to it from public pages, unless you list it in `allowPublic`.
+`--shell shell.html` uses your own template for the shell, which must contain `<!--web-threshold-->` exactly once. The shell fetches `/s/site.json`, so every page in a site shares one bundle. Reloading shows the door again, unless the door is remembered. Keep the path random, and don't link to it from public pages, unless you list it in `allowPublic`.
+
+**Sealing a built site.** Leave out `from`, and `seal` seals the built page already at `page`, replacing it with a shell. Its address stays as it was, so links keep working. Run it on fresh build output, because it overwrites those files, and rebuild before sealing again. The source pages have to stay out of any public repo, or anyone can read them there. Only the pages are sealed: images and other files they use stay public at their usual addresses, unless you seal them as payloads too.
+
+```json
+{ "payloads": { "about": { "type": "text/html", "page": "pages/about.html" } }, "doors": [ ... ], "remember": "session" }
+```
+
+**Remembering across pages.** With `remember="session"` on the element (`"remember": "session"` in the doors file does this for shells), a door opened once stays open in that tab, across pages and reloads. On load, the element emits `tier-unlocked` again with `detail.replayed` true for each remembered door. A listener on the element hears any replay it missed, however late it attaches; a listener on `document` has to be there first. A handler that re-routes must skip replays, or a reload loops. After a rebuild, remembered keys open nothing, and visitors retype.
 
 To try it: `npm run build && npm run demo`, then open `http://localhost:4173`. `npm run test:browsers` runs the demo in Chromium, WebKit and Firefox.
 

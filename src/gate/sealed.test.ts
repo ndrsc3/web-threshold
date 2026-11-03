@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import "./sealed-entry.js";
 import { MAX_ITERATIONS, deriveKek, encrypt, fold1, fromB64, padRecord, randomBytes, toB64, type Bundle } from "./sealed-format.js";
 
@@ -250,6 +250,176 @@ describe("faults: threshold-error, no unlock, never tier-rejected", () => {
     } finally {
       Object.defineProperty(globalThis, "crypto", original);
     }
+  });
+});
+
+describe("session memory", () => {
+  let bundle: Bundle;
+  beforeAll(async () => {
+    bundle = await makeBundle([
+      { phrase: "the fox was here", tier: "fox", data: { n: 1 }, payloads: { note: "fox note" } },
+      { phrase: "an owl kept watch", tier: "owl" },
+    ]);
+  });
+  beforeEach(() => sessionStorage.clear());
+  const KEY = "web-threshold:keys";
+  const stored = () => JSON.parse(sessionStorage.getItem(KEY) ?? "[]") as string[];
+
+  it("is off by default: nothing written, nothing replayed", async () => {
+    const { el, events } = mount(bundle);
+    type(el, "the fox was here");
+    await settle(el);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.detail.replayed).toBeUndefined();
+    expect(sessionStorage.length).toBe(0);
+    const second = mount(bundle);
+    await new Promise((done) => setTimeout(done, 20));
+    expect(second.events).toEqual([]);
+  });
+
+  it("replays a door on the next page, flagged, with payloads", async () => {
+    const first = mount(bundle, { remember: "session" });
+    type(first.el, "the fox was here");
+    await settle(first.el);
+    expect(first.events[0]!.detail.replayed).toBeUndefined();
+
+    const next = mount(bundle, { remember: "session" });
+    await vi.waitFor(() => expect(next.events).toHaveLength(1));
+    const { detail } = next.events[0]!;
+    expect(detail.replayed).toBe(true);
+    expect(detail.tier).toBe("fox");
+    expect(detail.data).toEqual({ n: 1 });
+    expect(await (await detail.open("note")).text()).toBe("fox note");
+  });
+
+  it("replays every door opened in this tab", async () => {
+    const first = mount(bundle, { remember: "session" });
+    type(first.el, "the fox was here");
+    await settle(first.el);
+    type(first.el, "an owl kept watch");
+    await settle(first.el);
+    const next = mount(bundle, { remember: "session" });
+    await vi.waitFor(() => expect(next.events.map((e) => e.detail.tier).sort()).toEqual(["fox", "owl"]));
+  });
+
+  it("stores a key once per door, and never the phrase", async () => {
+    const { el } = mount(bundle, { remember: "session" });
+    type(el, "the fox was here");
+    await settle(el);
+    type(el, "THE FOX WAS HERE");
+    await settle(el);
+    expect(stored()).toHaveLength(1);
+    expect(sessionStorage.getItem(KEY)).not.toContain("fox");
+  });
+
+  it("a wrong phrase never enters memory", async () => {
+    const { el } = mount(bundle, { remember: "session" });
+    type(el, "wrong");
+    await settle(el);
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it("a key from another build opens nothing, with no fault", async () => {
+    const { el } = mount(bundle, { remember: "session" });
+    type(el, "the fox was here");
+    await settle(el);
+    const rebuilt = await makeBundle([{ phrase: "the fox was here", tier: "fox" }]);
+    const next = mount(rebuilt, { remember: "session" });
+    await new Promise((done) => setTimeout(done, 20));
+    expect(next.events).toEqual([]);
+  });
+
+  it.each([["not JSON", "{{{"], ["not a list", '{"a":1}'], ["junk entries", '["%%%", 3, null]']])("survives %s in storage", async (_label, value) => {
+    sessionStorage.setItem(KEY, value);
+    const { el, events } = mount(bundle, { remember: "session" });
+    await new Promise((done) => setTimeout(done, 20));
+    expect(events).toEqual([]);
+    type(el, "the fox was here");
+    await settle(el);
+    expect(events.map((e) => e.detail?.tier)).toEqual(["fox"]);
+  });
+
+  it("storage that throws only means retyping", async () => {
+    vi.stubGlobal("sessionStorage", {
+      getItem() {
+        throw new Error("denied");
+      },
+      setItem() {
+        throw new Error("denied");
+      },
+    });
+    try {
+      const { el, events } = mount(bundle, { remember: "session" });
+      type(el, "the fox was here");
+      await settle(el);
+      expect(events.map((e) => e.type)).toEqual(["tier-unlocked"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("refuses another remember value, storing nothing", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { el, events } = mount(bundle, { remember: "forever" });
+    await vi.waitFor(() => expect(events.map((e) => e.detail?.code)).toEqual(["unsupported-remember"]));
+    type(el, "the fox was here");
+    await settle(el);
+    expect(sessionStorage.length).toBe(0);
+    vi.restoreAllMocks();
+  });
+
+  it("a listener attached well after the replay still hears it, once", async () => {
+    const first = mount(bundle, { remember: "session" });
+    type(first.el, "the fox was here");
+    await settle(first.el);
+    const next = mount(bundle, { remember: "session" });
+    await vi.waitFor(() => expect(next.events).toHaveLength(1));
+    const heard: { replayed: boolean; tier: string }[] = [];
+    next.el.addEventListener("tier-unlocked", (e) => heard.push((e as CustomEvent).detail));
+    await new Promise((done) => setTimeout(done, 10));
+    expect(heard.map((d) => [d.tier, d.replayed])).toEqual([["fox", true]]);
+    expect(next.events).toHaveLength(1);
+  });
+
+  it("an object listener hears a missed replay too", async () => {
+    const first = mount(bundle, { remember: "session" });
+    type(first.el, "the fox was here");
+    await settle(first.el);
+    const next = mount(bundle, { remember: "session" });
+    await vi.waitFor(() => expect(next.events).toHaveLength(1));
+    const heard: unknown[] = [];
+    next.el.addEventListener("tier-unlocked", { handleEvent: (e: Event) => heard.push((e as CustomEvent).detail.tier) });
+    await new Promise((done) => setTimeout(done, 10));
+    expect(heard).toEqual(["fox"]);
+  });
+
+  it("a typed unlock isn't delivered again to a later listener", async () => {
+    const { el } = mount(bundle, { remember: "session" });
+    type(el, "the fox was here");
+    await settle(el);
+    const heard: unknown[] = [];
+    el.addEventListener("tier-unlocked", (e) => heard.push((e as CustomEvent).detail));
+    await new Promise((done) => setTimeout(done, 10));
+    expect(heard).toEqual([]);
+  });
+
+  it("a listener attached in the import's task hears a replay", async () => {
+    const first = mount(bundle, { remember: "session" });
+    type(first.el, "the fox was here");
+    await settle(first.el);
+    document.body.innerHTML = "";
+    const script = document.createElement("script");
+    script.id = "b";
+    script.type = "application/json";
+    script.textContent = JSON.stringify(bundle);
+    document.body.append(script);
+    const el = document.createElement("web-threshold");
+    el.setAttribute("sealed", "#b");
+    el.setAttribute("remember", "session");
+    document.body.append(el); // connected first
+    const heard: boolean[] = [];
+    el.addEventListener("tier-unlocked", (e) => heard.push((e as CustomEvent).detail.replayed)); // then listening
+    await vi.waitFor(() => expect(heard).toEqual([true]));
   });
 });
 

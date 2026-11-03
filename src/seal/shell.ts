@@ -49,14 +49,15 @@ export interface Shell {
   publicText: string;
 }
 
-export function buildShell(template: string, bundlePath: string, payloadName: string, element: string): Shell {
+export function buildShell(template: string, bundlePath: string, payloadName: string, element: string, remember?: string): Shell {
   const parts = template.split(SHELL_MARKER);
   if (parts.length !== 2) throw new Error(`the shell must contain ${SHELL_MARKER} exactly once`);
+  const memory = remember ? ` remember="${attr(remember)}"` : "";
+  // One script, so the listener is attached before the element can replay a remembered door.
   const gate = (code: string) =>
     [
-      `<web-threshold sealed="${attr(bundlePath)}" data-open="${attr(payloadName)}" label="Enter the phrase" button="Enter"></web-threshold>`,
-      `<script type="module">${code}</script>`,
-      `<script type="module">${HANDLER}</script>`,
+      `<web-threshold sealed="${attr(bundlePath)}" data-open="${attr(payloadName)}"${memory} label="Enter the phrase" button="Enter"></web-threshold>`,
+      `<script type="module">${code}\n{${HANDLER}}</script>`,
     ].join("\n");
   return {
     html: parts[0] + gate(inScript(element)) + parts[1],

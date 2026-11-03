@@ -24,6 +24,7 @@
       #reveal { white-space: pre-wrap; border-left: 2px solid var(--accent); padding-left: 1em; font: inherit; }
       #wrong { min-height: 1.5em; font-style: italic; }
       code { overflow-wrap: anywhere; }
+      a { color: var(--accent); }
       #figure { display: block; width: 100%; max-width: 16rem; height: auto; image-rendering: pixelated; }
       #figure[hidden] { display: none; }
     </style>
@@ -32,8 +33,9 @@
     <h1>The Threshold, sealed</h1>
     <p>Each phrase opens something different, and what it opens isn't in this page's source. Try <code>the fox was here</code>, <code>the kiln is still warm</code>, <code>σας περιμένω στο κατώφλι</code>, <code>the moth came back</code> or <code>the inner room waits</code>.</p>
 
-    <web-threshold sealed="/s/site.json" report-wrong label="Speak the phrase" button="Enter" placeholder="…"></web-threshold>
+    <web-threshold sealed="/s/site.json" remember="session" report-wrong label="Speak the phrase" button="Enter" placeholder="…"></web-threshold>
 
+    <p><a href="/second.html">The second page</a></p>
     <p id="wrong" role="status"></p>
     <p>opened: <strong id="tier">nothing yet</strong></p>
     <p id="message"></p>
