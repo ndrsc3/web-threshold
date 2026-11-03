@@ -121,6 +121,8 @@ This writes `dist/s/site.json`, proves each phrase opens exactly its own payload
 
 **Remembering across pages.** With `remember="session"` on the element (`"remember": "session"` in the doors file does this for shells), a door opened once stays open in that tab, across pages and reloads. On load, the element emits `tier-unlocked` again with `detail.replayed` true for each remembered door. A listener on the element hears any replay it missed, however late it attaches; a listener on `document` has to be there first. A handler that re-routes must skip replays, or a reload loops. After a rebuild, remembered keys open nothing, and visitors retype.
 
+**Every way in.** Each sealed address serves its own door, so a deep link, QR code or bookmark opens that same page after its phrase, keeping its full address. With `remember`, links, reloads and back and forward open directly in that tab, while a new tab asks again unless a script opened it. With JavaScript off the page is blank, and a shared link shows a generic card unless a custom shell adds public preview tags.
+
 To try it: `npm run build && npm run demo`, then open `http://localhost:4173`. `npm run test:browsers` runs the demo in Chromium, WebKit and Firefox.
 
 ## Visitor policy: robots.txt from one config

@@ -6,6 +6,9 @@ Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-
 ## P1 — now
 - [ ] **v0.5 sealed mode: phone bench** `[GATE]` — all three slices built and passing in Chromium, WebKit and Firefox; ▶ owner: open `bench.html` on a real phone over HTTPS; over 1 s returns to the owner
   - plan: `docs/plans/261029-v0.5-encrypted-tiers.md` · design: `docs/plans/261102-v0.5-sealed-design.md`
+- [ ] **v0.5 sealed mode: release** `[GATE]` — ▶ one final `/adversarial-review` of the last fixes (each pass so far found highs), then a clean-clone build (`dist/` is still v0.4.0), tag `v0.5.0`, owner pushes
+- [ ] **Port guard mutations to the house `mutation-check.py`** `[GATE]` — session lists and the two site-trial scripts in `docs/mutations/`; some target strings are stale, and they print MISSING rather than fail
+- [ ] **Default shell: `<noscript>` line** `[GATE]` — with JavaScript off a sealed page is blank; nothing leaks, but say why. Design note § Every way into a sealed page
 - [ ] **Banana Rodeo: whole-site trial done, adoption later** `[GATE]` — owner 261102: revisit later. Open for it: pages in a public repo, its Vercel-hosted build, images stay public; a signed cookie is the alternative for a real lock
 
 ## P2 — next-up
