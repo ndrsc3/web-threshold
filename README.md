@@ -4,8 +4,6 @@
 
 <img src="docs/images/sealed-fox-opened.png" alt="A page with a 'Speak the phrase' input. After typing 'the fox was here', the page turned dark green and gold and a hidden note appeared." width="420">
 
-Used by La Finka's sites and others: lafinka.space, noesis.lafinka.space and banana.rodeo (planned).
-
 ## Which part do you need?
 
 ```mermaid
