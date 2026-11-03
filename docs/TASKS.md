@@ -4,8 +4,8 @@ Status: active
 Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-encrypted-tiers.md`
 
 ## P1 — now
-- [ ] **v0.5.0: push** `[GATE]` — built from a clean clone and tagged locally (261102) ▶ owner: `git push origin main v0.5.0`, then bump consumers
-- [ ] **Port guard mutations to the house `mutation-check.py`** `[GATE]` — after the v0.5.0 tag (owner 261102). Session lists and the two site-trial scripts in `docs/mutations/`; some target strings are stale, and they print MISSING rather than fail
+- [ ] **Bump consumers to v0.5.0** — only `web_noesis` pins the package (v0.3.0); its row is on its own board, P3, after its v1. Banana Rodeo's adoption row names v0.5.0
+- [ ] **Port guard mutations to the house `mutation-check.py`** `[GATE]` — unblocked (v0.5.0 is out). The older session lists in `docs/mutations/` have stale targets and print MISSING rather than fail; `261102-round-j.py` already fails closed
 - [ ] **Banana Rodeo: whole-site trial done, adoption later** `[GATE]` — owner 261102: revisit later. Open for it: pages in a public repo, its Vercel-hosted build, images stay public; a signed cookie is the alternative for a real lock
 
 ## P2 — next-up
@@ -21,6 +21,7 @@ Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-
 - [ ] **Maze** — parked 261102 (owner): record and refuse first; revisit only if a site wants it as an exhibit
 
 ## Done
+- [x] **v0.5.0: sealed mode** — two shipped-code reviews folded (-j, -k), clean-clone build, tagged and pushed (261102)
 - [x] **Docs** — README front door, `docs/sealed-mode.md`, `docs/visitor-policy.md`; images via `npm run docs:shots` (261102)
 - [x] **Default shell: `<noscript>` line** — a sealed page with JavaScript off says it needs it (261102)
 - [x] **v0.5 sealed mode: phone bench** — median 73 ms, slowest 80 ms at 600k and 64 slots, Pixel 9 Pro over HTTPS; older phones and iOS unmeasured (261102)
