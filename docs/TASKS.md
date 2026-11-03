@@ -21,6 +21,7 @@ Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-
 - [ ] **Maze** — parked 261102 (owner): record and refuse first; revisit only if a site wants it as an exhibit
 
 ## Done
+- [x] **Docs** — README front door, `docs/sealed-mode.md`, `docs/visitor-policy.md`; images via `npm run docs:shots` (261102)
 - [x] **Default shell: `<noscript>` line** — a sealed page with JavaScript off says it needs it (261102)
 - [x] **v0.5 sealed mode: phone bench** — median 73 ms, slowest 80 ms at 600k and 64 slots, Pixel 9 Pro over HTTPS; older phones and iOS unmeasured (261102)
 - [x] **v0.4.0: visitor policy level 0** — config, 43-bot list, generated robots.txt, gate inherited-key fix; ▶ first adopter checks the file on a Vercel preview (261102)

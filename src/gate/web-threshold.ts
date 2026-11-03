@@ -8,7 +8,7 @@
  * theater"). No persistence, no admin UI, no token URLs. The consuming page owns
  * what happens on unlock; the Threshold only emits the event.
  *
- * Contract: README.md § Contract.
+ * Contract: README.md § Plain gate; sealed mode: docs/sealed-mode.md.
  */
 
 export type TierName = string;

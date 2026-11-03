@@ -43,7 +43,8 @@
     "demo:build": "node scripts/build-demo.mjs",
     "demo": "npm run demo:build && vite preview --outDir .demo --port 4173",
     "test:consumer": "node scripts/test-consumer.mjs",
-    "test:browsers": "node scripts/test-browsers.mjs"
+    "test:browsers": "node scripts/test-browsers.mjs",
+    "docs:shots": "node scripts/docs-shots.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
