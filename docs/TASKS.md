@@ -15,6 +15,7 @@ Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-
 - [ ] **Visitor policy: guard level 1** `[GUARD]` — middleware refuses listed bots, catches impostors by IP range, records and refuses trap hits; arcjet identity data joins the catalogue; needs the Key Constraints #3 and #5 call
   - exploration: `docs/explorations/261102-visitor-policy.md` §§ 4–5
 - [ ] **Visitor policy: guard level 2** `[GUARD]` — remember trapped bots site-wide; only once logs show trap hits worth it
+- [ ] **La Finka garden: sealed files for gated pages** — owner 261104: the house-only geothermal manual (`/maintenance/systems/system-geothermal/`, group `agorideans`) embeds a schematic and marked-up basement photos, which stay public at their own URLs under staticrypt. Accepted for now. The case for moving the garden's gating to sealed mode; the decision row is in `digitalgarden_lafinka/docs/TASKS.md` ("Decide whether page gating moves to The Threshold's sealed mode")
 
 ## Parked
 - [ ] **Bot viewer / exhibit** — parked 261102 (owner): later exploration, configurable per site; the Crawler Zoo already does it well
