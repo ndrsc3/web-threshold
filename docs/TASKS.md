@@ -4,7 +4,7 @@ Status: active
 Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-encrypted-tiers.md`
 
 ## P1 — now
-- [ ] **Bump consumers to v0.5.0** — only `web_noesis` pins the package (v0.3.0); its row is on its own board, P3, after its v1. Banana Rodeo's adoption row names v0.5.0
+- [ ] **Bump consumers to v0.6.0** — only `web_noesis` pins the package (v0.3.0); its row is on its own board, P3, after its v1. Banana Rodeo's adoption row names v0.5.0. underScore's `publish-core.py` reads the tag and is on v0.6.0
 - [ ] **Port the old guard mutations, one list at a time** `[GATE]` — `mutation-check.py` runs vitest now (`"runner": "vitest"`), and `docs/mutations/v0.6.0.json` is the first spec. Port a list when its code is next changed, not in bulk: 124 of the 156 old anchors still match and 30 are stale. A whole-suite sweep to find each mutation's catching tests took ~30 s a mutation (stopped 261120), and `seal.test.ts` alone is ~35 s a run. `261102-round-j.py` already fails closed
 - [ ] **Banana Rodeo: whole-site trial done, adoption later** `[GATE]` — owner 261102: revisit later. Open for it: pages in a public repo, its Vercel-hosted build, images stay public; a signed cookie is the alternative for a real lock
 
