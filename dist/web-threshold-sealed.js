@@ -81,7 +81,7 @@ class W extends HTMLElement {
     });
   }
   static get observedAttributes() {
-    return ["placeholder", "label", "button"];
+    return ["placeholder", "label", "button", "masked"];
   }
   /** Consumer sets this — `el.secrets = { "phrase": "tier" }`. Never persisted. */
   set secrets(t) {
@@ -168,13 +168,13 @@ p = new WeakMap(), u = new WeakMap(), b = new WeakSet(), L = function() {
     `, t.querySelector("form").addEventListener("submit", i(this, E)), a(this, b, F).call(this);
 }, /** Build the form's contents from the current attributes. */
 F = function() {
-  const t = this.shadowRoot.querySelector("form"), r = this.getAttribute("label"), o = this.getAttribute("button"), c = this.getAttribute("inputmode") ?? "text";
+  const t = this.shadowRoot.querySelector("form"), r = this.getAttribute("label"), o = this.getAttribute("button"), c = this.getAttribute("inputmode") ?? "text", h = this.hasAttribute("masked") ? "password" : "text";
   t.innerHTML = `
       ${r ? `<label part="label" for="threshold-input">${k(r)}</label>` : ""}
       <input
         part="input"
         id="threshold-input"
-        type="text"
+        type="${h}"
         inputmode="${k(c)}"
         name="threshold"
         placeholder="${k(this.getAttribute("placeholder") ?? "")}"

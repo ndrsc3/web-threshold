@@ -1,16 +1,16 @@
-var v = (e) => {
+var y = (e) => {
   throw TypeError(e);
 };
-var b = (e, o, t) => o.has(e) || v("Cannot " + t);
-var s = (e, o, t) => (b(e, o, "read from private field"), t ? t.call(e) : o.get(e)), h = (e, o, t) => o.has(e) ? v("Cannot add the same private member more than once") : o instanceof WeakSet ? o.add(e) : o.set(e, t), m = (e, o, t, r) => (b(e, o, "write to private field"), r ? r.call(e, t) : o.set(e, t), t), u = (e, o, t) => (b(e, o, "access private method"), t);
-var l, i, a, y, f, c;
+var m = (e, o, t) => o.has(e) || y("Cannot " + t);
+var s = (e, o, t) => (m(e, o, "read from private field"), t ? t.call(e) : o.get(e)), h = (e, o, t) => o.has(e) ? y("Cannot add the same private member more than once") : o instanceof WeakSet ? o.add(e) : o.set(e, t), f = (e, o, t, r) => (m(e, o, "write to private field"), r ? r.call(e, t) : o.set(e, t), t), d = (e, o, t) => (m(e, o, "access private method"), t);
+var l, i, a, v, g, p;
 class w extends HTMLElement {
   constructor() {
     super(...arguments);
     h(this, a);
     h(this, l, {});
     h(this, i, null);
-    h(this, c, (t) => {
+    h(this, p, (t) => {
       var n;
       t.preventDefault();
       const r = (((n = s(this, i)) == null ? void 0 : n.value) ?? "").trim();
@@ -18,17 +18,17 @@ class w extends HTMLElement {
     });
   }
   static get observedAttributes() {
-    return ["placeholder", "label", "button"];
+    return ["placeholder", "label", "button", "masked"];
   }
   /** Consumer sets this — `el.secrets = { "phrase": "tier" }`. Never persisted. */
   set secrets(t) {
-    m(this, l, t ?? {});
+    f(this, l, t ?? {});
   }
   get secrets() {
     return s(this, l);
   }
   connectedCallback() {
-    this.shadowRoot || (u(this, a, y).call(this), this.hasAttribute("sealed") && this.sealedAttached());
+    this.shadowRoot || (d(this, a, v).call(this), this.hasAttribute("sealed") && this.sealedAttached());
   }
   /** The sealed entry loads its bundle here. This entry can't open one. */
   sealedAttached() {
@@ -40,14 +40,14 @@ class w extends HTMLElement {
     );
   }
   attributeChangedCallback(t, r, n) {
-    var g;
+    var u;
     if (!this.shadowRoot || r === n) return;
     if (t === "placeholder" && s(this, i)) {
       s(this, i).placeholder = n ?? "";
       return;
     }
-    const p = ((g = s(this, i)) == null ? void 0 : g.value) ?? "";
-    u(this, a, f).call(this), s(this, i) && (s(this, i).value = p);
+    const b = ((u = s(this, i)) == null ? void 0 : u.value) ?? "";
+    d(this, a, g).call(this), s(this, i) && (s(this, i).value = b);
   }
   /**
    * Submit the current value, as pressing return would. The phone number pad
@@ -73,7 +73,7 @@ class w extends HTMLElement {
     );
   }
 }
-l = new WeakMap(), i = new WeakMap(), a = new WeakSet(), y = function() {
+l = new WeakMap(), i = new WeakMap(), a = new WeakSet(), v = function() {
   const t = this.attachShadow({ mode: "open" });
   t.innerHTML = `
       <style>
@@ -102,28 +102,28 @@ l = new WeakMap(), i = new WeakMap(), a = new WeakSet(), y = function() {
         }
       </style>
       <form part="form" autocomplete="off" novalidate></form>
-    `, t.querySelector("form").addEventListener("submit", s(this, c)), u(this, a, f).call(this);
+    `, t.querySelector("form").addEventListener("submit", s(this, p)), d(this, a, g).call(this);
 }, /** Build the form's contents from the current attributes. */
-f = function() {
-  const t = this.shadowRoot.querySelector("form"), r = this.getAttribute("label"), n = this.getAttribute("button"), p = this.getAttribute("inputmode") ?? "text";
+g = function() {
+  const t = this.shadowRoot.querySelector("form"), r = this.getAttribute("label"), n = this.getAttribute("button"), b = this.getAttribute("inputmode") ?? "text", u = this.hasAttribute("masked") ? "password" : "text";
   t.innerHTML = `
-      ${r ? `<label part="label" for="threshold-input">${d(r)}</label>` : ""}
+      ${r ? `<label part="label" for="threshold-input">${c(r)}</label>` : ""}
       <input
         part="input"
         id="threshold-input"
-        type="text"
-        inputmode="${d(p)}"
+        type="${u}"
+        inputmode="${c(b)}"
         name="threshold"
-        placeholder="${d(this.getAttribute("placeholder") ?? "")}"
+        placeholder="${c(this.getAttribute("placeholder") ?? "")}"
         ${r ? "" : 'aria-label="Enter a phrase to continue"'}
         autocapitalize="none"
         autocorrect="off"
         spellcheck="false"
       />
-      ${n ? `<button part="button" type="submit">${d(n)}</button>` : ""}
-    `, m(this, i, t.querySelector("input"));
-}, c = new WeakMap();
-function d(e) {
+      ${n ? `<button part="button" type="submit">${c(n)}</button>` : ""}
+    `, f(this, i, t.querySelector("input"));
+}, p = new WeakMap();
+function c(e) {
   return e.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 customElements.get("web-threshold") || customElements.define("web-threshold", w);

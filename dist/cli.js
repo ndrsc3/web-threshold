@@ -581,7 +581,7 @@ function scan(input) {
       result.allowed.push(target.label);
       return [];
     }
-    return [{ label: target.label, folded, tokens: tokensOf(folded) }];
+    return [{ label: target.label, folded, tokens: tokensOf(folded), strict: target.strict === true }];
   });
   const payloads = input.payloads.flatMap((payload) => {
     if (allow.has(fold1(payload.text))) {
@@ -607,7 +607,7 @@ function scan(input) {
     for (const needle of needles) {
       const substring = needle.tokens.length === 0 || UNSPACED.test(needle.folded);
       const hit = needle.tokens.length > 0 && found(needle.tokens) || substring && views.some((view) => view.folded.includes(needle.folded));
-      if (hit) report(needle.label, needle.tokens.length >= 3 || needle.folded.length >= 16);
+      if (hit) report(needle.label, needle.strict || needle.tokens.length >= 3 || needle.folded.length >= 16);
     }
     const hits = /* @__PURE__ */ new Map();
     for (const [length, byText] of runIndex) {
@@ -710,10 +710,10 @@ gate.addEventListener("tier-unlocked", async ({ detail }) => {
 });`;
 const attr = (text) => text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 const inScript = (text) => text.replace(/<\/(script)/gi, "<\\/$1").replace(/<!--/g, "<\\!--");
-function buildShell(template, bundlePath, payloadName, element, remember) {
+function buildShell(template, bundlePath, payloadName, element, remember, masked) {
   const parts = template.split(SHELL_MARKER);
   if (parts.length !== 2) throw new Error(`the shell must contain ${SHELL_MARKER} exactly once`);
-  const memory = remember ? ` remember="${attr(remember)}"` : "";
+  const memory = (remember ? ` remember="${attr(remember)}"` : "") + (masked ? " masked" : "");
   const gate = (code) => [
     `<web-threshold sealed="${attr(bundlePath)}" data-open="${attr(payloadName)}"${memory} label="Enter the phrase" button="Enter"></web-threshold>`,
     `<script type="module">${code}
@@ -761,8 +761,11 @@ function validateDoors(raw) {
   const errors = [];
   if (typeof raw !== "object" || raw === null) throw new SealRefusal("the doors file must be a JSON object");
   const file = raw;
-  unknownKeys("doors file", file, ["payloads", "doors", "allowPublic", "remember"], errors);
+  unknownKeys("doors file", file, ["payloads", "doors", "allowPublic", "remember", "masked", "strict"], errors);
   if (file.remember !== void 0 && file.remember !== "session") errors.push('remember can only be "session"');
+  for (const key of ["masked", "strict"]) {
+    if (file[key] !== void 0 && typeof file[key] !== "boolean") errors.push(`${key} must be true or false`);
+  }
   const payloads = typeof file.payloads === "object" && file.payloads !== null ? file.payloads : {};
   const seenPages = /* @__PURE__ */ new Set();
   for (const [name, payload] of Object.entries(payloads)) {
@@ -820,7 +823,14 @@ function validateDoors(raw) {
     if ((payload == null ? void 0 : payload.page) !== void 0 && !opened.has(name)) errors.push(`payload ${name}: no door opens this page, so its shell would be a dead end`);
   }
   if (errors.length > 0) throw new SealRefusal(errors.join("\n"));
-  return { payloads, doors, allowPublic, ...file.remember ? { remember: file.remember } : {} };
+  return {
+    payloads,
+    doors,
+    allowPublic,
+    ...file.remember ? { remember: file.remember } : {},
+    ...file.masked === true ? { masked: true } : {},
+    ...file.strict === true ? { strict: true } : {}
+  };
 }
 function confine(out, target) {
   try {
@@ -1003,7 +1013,7 @@ async function sealInner(options, log) {
   const template = options.shell ? readFileSync(resolve(options.shell), "utf8") : DEFAULT_SHELL;
   if (pages.length > 0 && !options.element) throw new SealRefusal("sealed pages need the built element: run `npm run build` in web-threshold");
   if (pages.length > 0 && template.split(SHELL_MARKER).length !== 2) throw new SealRefusal(`the shell must contain ${SHELL_MARKER} exactly once`);
-  const shells = pages.map(([name, payload]) => ({ path: payload.page, ...buildShell(template, `/${BUNDLE_PATH}`, name, options.element ?? "", file.remember) }));
+  const shells = pages.map(([name, payload]) => ({ path: payload.page, ...buildShell(template, `/${BUNDLE_PATH}`, name, options.element ?? "", file.remember, file.masked) }));
   confine(out, BUNDLE_PATH);
   for (const path of built.files.keys()) confine(out, path);
   const dataStrings = (value) => {
@@ -1025,7 +1035,7 @@ async function sealInner(options, log) {
     staged: [{ file: BUNDLE_PATH, text: json }, ...shells.map((shell) => ({ file: shell.path, text: shell.publicText }))],
     targets: [
       ...file.doors.flatMap((door) => [
-        { label: `the phrase of door ${door.tier}`, text: door.phrase },
+        { label: `the phrase of door ${door.tier}`, text: door.phrase, strict: file.strict === true },
         ...dataStrings(door.data).map((text) => ({ label: `a data value of door ${door.tier}`, text }))
       ]),
       // A page sealed in place keeps its known address: only a hidden page's address is a secret.
