@@ -24,6 +24,8 @@ export interface Target {
   text: string;
   /** A page's address: any spelling of it in allowPublic covers it. */
   path?: boolean;
+  /** Any hit aborts, however short: a phrase under the doors file's `strict`. */
+  strict?: boolean;
   /** Payloads: HTML-like text, whose tags and code aren't the text. */
   markup?: boolean;
 }
@@ -191,7 +193,7 @@ function runsOf(text: string, markup: boolean): string[][] {
   );
 }
 
-/** One rule: a hit of 3+ tokens or 16+ characters aborts; a shorter hit warns. */
+/** One rule: a hit of 3+ tokens or 16+ characters aborts; a shorter hit warns, unless its target is strict. */
 export function scan(input: ScanInput): ScanResult {
   const result: ScanResult = { aborts: [], warns: [], allowed: [], counts: { text: 0, compressed: 0, binary: 0 } };
   const allow = new Set(input.allowPublic.map(fold1));
@@ -208,7 +210,7 @@ export function scan(input: ScanInput): ScanResult {
       result.allowed.push(target.label);
       return [];
     }
-    return [{ label: target.label, folded, tokens: tokensOf(folded) }];
+    return [{ label: target.label, folded, tokens: tokensOf(folded), strict: target.strict === true }];
   });
   const payloads = input.payloads.flatMap((payload) => {
     if (allow.has(fold1(payload.text))) {
@@ -240,7 +242,7 @@ export function scan(input: ScanInput): ScanResult {
       // No tokens to match (symbols, emoji), or written without spaces: match the text itself.
       const substring = needle.tokens.length === 0 || UNSPACED.test(needle.folded);
       const hit = (needle.tokens.length > 0 && found(needle.tokens)) || (substring && views.some((view) => view.folded.includes(needle.folded)));
-      if (hit) report(needle.label, needle.tokens.length >= 3 || needle.folded.length >= 16);
+      if (hit) report(needle.label, needle.strict || needle.tokens.length >= 3 || needle.folded.length >= 16);
     }
     // Payload index → whether any hit aborts. One report per payload per file.
     const hits = new Map<number, boolean>();

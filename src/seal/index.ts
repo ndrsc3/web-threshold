@@ -52,6 +52,10 @@ export interface DoorsFile {
   allowPublic: string[];
   /** Written onto shells. Pages of a site's own use the attribute. */
   remember?: "session";
+  /** Shells type the phrase as dots. Pages of a site's own use the `masked` attribute. */
+  masked?: boolean;
+  /** A phrase found anywhere in public output stops the build, however short. */
+  strict?: boolean;
 }
 
 export interface SealOptions {
@@ -94,9 +98,12 @@ function unknownKeys(where: string, value: object, known: string[], errors: stri
 export function validateDoors(raw: unknown): DoorsFile {
   const errors: string[] = [];
   if (typeof raw !== "object" || raw === null) throw new SealRefusal("the doors file must be a JSON object");
-  const file = raw as { payloads?: unknown; doors?: unknown; allowPublic?: unknown; remember?: unknown };
-  unknownKeys("doors file", file, ["payloads", "doors", "allowPublic", "remember"], errors);
+  const file = raw as { payloads?: unknown; doors?: unknown; allowPublic?: unknown; remember?: unknown; masked?: unknown; strict?: unknown };
+  unknownKeys("doors file", file, ["payloads", "doors", "allowPublic", "remember", "masked", "strict"], errors);
   if (file.remember !== undefined && file.remember !== "session") errors.push('remember can only be "session"');
+  for (const key of ["masked", "strict"] as const) {
+    if (file[key] !== undefined && typeof file[key] !== "boolean") errors.push(`${key} must be true or false`);
+  }
 
   const payloads = (typeof file.payloads === "object" && file.payloads !== null ? file.payloads : {}) as Record<string, Record<string, unknown>>;
   const seenPages = new Set<string>();
@@ -160,7 +167,12 @@ export function validateDoors(raw: unknown): DoorsFile {
     if (payload?.page !== undefined && !opened.has(name)) errors.push(`payload ${name}: no door opens this page, so its shell would be a dead end`);
   }
   if (errors.length > 0) throw new SealRefusal(errors.join("\n"));
-  return { payloads, doors, allowPublic, ...(file.remember ? { remember: file.remember } : {}) } as unknown as DoorsFile;
+  return {
+    payloads, doors, allowPublic,
+    ...(file.remember ? { remember: file.remember } : {}),
+    ...(file.masked === true ? { masked: true } : {}),
+    ...(file.strict === true ? { strict: true } : {}),
+  } as unknown as DoorsFile;
 }
 
 /** A write target must land inside --out, whatever symlinks are on the way, and its folders must be folders. */
@@ -384,7 +396,7 @@ async function sealInner(options: SealOptions, log: (line: string) => void): Pro
   const template = options.shell ? readFileSync(resolve(options.shell), "utf8") : DEFAULT_SHELL;
   if (pages.length > 0 && !options.element) throw new SealRefusal("sealed pages need the built element: run `npm run build` in web-threshold");
   if (pages.length > 0 && template.split(SHELL_MARKER).length !== 2) throw new SealRefusal(`the shell must contain ${SHELL_MARKER} exactly once`);
-  const shells = pages.map(([name, payload]) => ({ path: payload.page!, ...buildShell(template, `/${BUNDLE_PATH}`, name, options.element ?? "", file.remember) }));
+  const shells = pages.map(([name, payload]) => ({ path: payload.page!, ...buildShell(template, `/${BUNDLE_PATH}`, name, options.element ?? "", file.remember, file.masked) }));
   confine(out, BUNDLE_PATH);
   for (const path of built.files.keys()) confine(out, path);
 
@@ -412,7 +424,7 @@ async function sealInner(options: SealOptions, log: (line: string) => void): Pro
     staged: [{ file: BUNDLE_PATH, text: json }, ...shells.map((shell) => ({ file: shell.path, text: shell.publicText }))],
     targets: [
       ...file.doors.flatMap((door) => [
-        { label: `the phrase of door ${door.tier}`, text: door.phrase },
+        { label: `the phrase of door ${door.tier}`, text: door.phrase, strict: file.strict === true },
         ...dataStrings(door.data).map((text) => ({ label: `a data value of door ${door.tier}`, text })),
       ]),
       // A page sealed in place keeps its known address: only a hidden page's address is a secret.

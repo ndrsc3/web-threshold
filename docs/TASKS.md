@@ -5,7 +5,7 @@ Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-
 
 ## P1 — now
 - [ ] **Bump consumers to v0.5.0** — only `web_noesis` pins the package (v0.3.0); its row is on its own board, P3, after its v1. Banana Rodeo's adoption row names v0.5.0
-- [ ] **Port guard mutations to the house `mutation-check.py`** `[GATE]` — unblocked (v0.5.0 is out). The older session lists in `docs/mutations/` have stale targets and print MISSING rather than fail; `261102-round-j.py` already fails closed
+- [ ] **Port the old guard mutations, one list at a time** `[GATE]` — `mutation-check.py` runs vitest now (`"runner": "vitest"`), and `docs/mutations/v0.6.0.json` is the first spec. Port a list when its code is next changed, not in bulk: 124 of the 156 old anchors still match and 30 are stale. A whole-suite sweep to find each mutation's catching tests took ~30 s a mutation (stopped 261120), and `seal.test.ts` alone is ~35 s a run. `261102-round-j.py` already fails closed
 - [ ] **Banana Rodeo: whole-site trial done, adoption later** `[GATE]` — owner 261102: revisit later. Open for it: pages in a public repo, its Vercel-hosted build, images stay public; a signed cookie is the alternative for a real lock
 
 ## P2 — next-up
@@ -22,6 +22,7 @@ Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-
 - [ ] **Maze** — parked 261102 (owner): record and refuse first; revisit only if a site wants it as an exhibit
 
 ## Done
+- [x] **v0.6.0 source: `masked` and `strict`** — `masked` attribute (password field) and `"masked": true` in the doors file for seal's shells; `"strict": true` makes any phrase hit in public output stop the build. Tests + `docs/mutations/v0.6.0.json` (4/4 caught). First consumer: underScore's `/startup/` (261120)
 - [x] **v0.5.0: sealed mode** — two shipped-code reviews folded (-j, -k), clean-clone build, tagged and pushed (261102)
 - [x] **Docs** — README front door, `docs/sealed-mode.md`, `docs/visitor-policy.md`; images via `npm run docs:shots` (261102)
 - [x] **Default shell: `<noscript>` line** — a sealed page with JavaScript off says it needs it (261102)

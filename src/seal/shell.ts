@@ -50,10 +50,10 @@ export interface Shell {
   publicText: string;
 }
 
-export function buildShell(template: string, bundlePath: string, payloadName: string, element: string, remember?: string): Shell {
+export function buildShell(template: string, bundlePath: string, payloadName: string, element: string, remember?: string, masked?: boolean): Shell {
   const parts = template.split(SHELL_MARKER);
   if (parts.length !== 2) throw new Error(`the shell must contain ${SHELL_MARKER} exactly once`);
-  const memory = remember ? ` remember="${attr(remember)}"` : "";
+  const memory = (remember ? ` remember="${attr(remember)}"` : "") + (masked ? " masked" : "");
   // The element and its handler in one script, so a shell is a single file. A late handler still hears replays.
   const gate = (code: string) =>
     [

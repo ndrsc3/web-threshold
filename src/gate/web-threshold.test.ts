@@ -118,6 +118,16 @@ describe("<web-threshold>", () => {
     expect(tier()).toEqual({ tier: "collaborator" });
   });
 
+  it("masked types the phrase as dots, and still unlocks", () => {
+    expect(el.shadowRoot!.querySelector("input")!.type).toBe("text");
+    el.setAttribute("masked", "");
+    const input = el.shadowRoot!.querySelector("input")!;
+    expect(input.type).toBe("password");
+    const tier = captureTier(el);
+    submit(el, "vouchsafe");
+    expect(tier()).toEqual({ tier: "collaborator" });
+  });
+
   it("renders no prompt or button by default", () => {
     expect(el.shadowRoot!.querySelector("label")).toBeNull();
     expect(el.shadowRoot!.querySelector("button")).toBeNull();

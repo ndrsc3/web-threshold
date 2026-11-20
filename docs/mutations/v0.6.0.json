@@ -1,0 +1,40 @@
+{
+  "root": "../..",
+  "runner": "vitest",
+  "link": ["node_modules"],
+  "copy": ["src", "demo", "data", "package.json", "vitest.config.ts", "tsconfig.json", "tsconfig.cli.json"],
+  "mutations": [
+    {
+      "name": "masked attribute ignored: the phrase shows as typed",
+      "file": "src/gate/web-threshold.ts",
+      "old": "const type = this.hasAttribute(\"masked\") ? \"password\" : \"text\";",
+      "new": "const type = \"text\";",
+      "test": "src/gate/web-threshold.test.ts",
+      "ids": ["<web-threshold> masked types the phrase as dots, and still unlocks"]
+    },
+    {
+      "name": "doors-file masked never reaches the shells seal writes",
+      "file": "src/seal/shell.ts",
+      "old": " + (masked ? \" masked\" : \"\")",
+      "new": "",
+      "test": "src/seal/seal.test.ts",
+      "ids": ["masked in the doors file shells type the phrase as dots"]
+    },
+    {
+      "name": "strict ignored: a short phrase in public output only warns",
+      "file": "src/seal/scan.ts",
+      "old": "needle.strict || ",
+      "new": "",
+      "test": "src/seal/seal.test.ts",
+      "ids": ["strict in the doors file a short phrase in public text stops the build, and writes nothing"]
+    },
+    {
+      "name": "masked and strict values unchecked",
+      "file": "src/seal/index.ts",
+      "old": "if (file[key] !== undefined && typeof file[key] !== \"boolean\") errors.push",
+      "new": "if (false) errors.push",
+      "test": "src/seal/seal.test.ts",
+      "ids": ["masked in the doors file refuses a value that isn't true or false", "strict in the doors file refuses a value that isn't true or false"]
+    }
+  ]
+}

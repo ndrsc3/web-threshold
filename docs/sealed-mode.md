@@ -211,6 +211,8 @@ Never put `data` into `innerHTML`: use `textContent`.
 | `doors[].data` | no | Any JSON, given to your page untouched. |
 | `allowPublic` | no | Exact strings meant to be public (a clue on the page); the build check skips them. |
 | `remember` | no | `"session"`: shells remember opened doors per tab. |
+| `masked` | no | `true`: shells type the phrase as dots. Your own pages use the element's `masked` attribute. |
+| `strict` | no | `true`: a door's phrase found anywhere in public output stops the build, however short. `data` values and payload text keep the normal rule. |
 
 1 to 1,024 doors (over 256 warns: about 0.7 KB each). Any unknown key stops the build, so typos aren't silently ignored.
 
@@ -222,7 +224,7 @@ Never put `data` into `innerHTML`: use `textContent`.
 
 ### Element and events
 
-Import `@ndrsc3/web-threshold/sealed`, self-hosted on sealed pages. Attributes: `sealed` (the bundle's same-site address, in the HTML before the element connects), `remember="session"`, `report-wrong`, and the plain-gate `label`, `button`, `placeholder`, `inputmode` ([README](../README.md#plain-gate)). While checking a phrase it sets `busy` and `aria-busy`: style `web-threshold[busy]`.
+Import `@ndrsc3/web-threshold/sealed`, self-hosted on sealed pages. Attributes: `sealed` (the bundle's same-site address, in the HTML before the element connects), `remember="session"`, `report-wrong`, and the plain-gate `label`, `button`, `placeholder`, `inputmode`, `masked` ([README](../README.md#plain-gate)). While checking a phrase it sets `busy` and `aria-busy`: style `web-threshold[busy]`.
 
 | Event | When | `detail` |
 |---|---|---|
@@ -252,7 +254,7 @@ Nothing happens and no error? Check the page imports the `sealed` entry.
 
 ## The build check
 
-A safety net for ordinary mistakes, not a guarantee. It looks for every phrase, `data` value, hidden page address and payload text in all your public files and their names. **A match of 3+ words or 16+ characters stops the build** (`… appears in index.html`); a shorter one warns. Remove the leak, or list a deliberately public string in `allowPublic`.
+A safety net for ordinary mistakes, not a guarantee. It looks for every phrase, `data` value, hidden page address and payload text in all your public files and their names. **A match of 3+ words or 16+ characters stops the build** (`… appears in index.html`); a shorter one warns. Remove the leak, or list a deliberately public string in `allowPublic`. With `"strict": true`, a phrase stops the build at any length: a short phrase that is also a word on your page is the one a visitor can guess from the source.
 
 - **Reads through** tags; JSON and script escapes (`\n`, `\uXXXX`, `\u{…}`, `\xXX`); URL escapes; numeric and common named HTML entities (quotes, dashes, `&hellip;`, `&nbsp;`, `&shy;`, `&eacute;`-style accents); invisible word-splitters (soft hyphens, zero-width spaces and joiners); one level of `.gz`/`.br`. A public copy of a sealed file, compressed or not, stops the build.
 - **Doesn't read** base64, rarer entities, files compressed twice, or images (a resized copy of a sealed image isn't detected). In languages written without spaces, sealed text matches only in whole runs between punctuation.

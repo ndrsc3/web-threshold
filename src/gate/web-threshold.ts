@@ -31,7 +31,7 @@ export class WebThreshold extends HTMLElement {
   #input: HTMLInputElement | null = null;
 
   static get observedAttributes(): string[] {
-    return ["placeholder", "label", "button"];
+    return ["placeholder", "label", "button", "masked"];
   }
 
   /** Consumer sets this — `el.secrets = { "phrase": "tier" }`. Never persisted. */
@@ -68,7 +68,7 @@ export class WebThreshold extends HTMLElement {
       this.#input.placeholder = value ?? "";
       return;
     }
-    // label and button add or remove elements, so rebuild the form (the typed value is kept).
+    // label, button and masked change the form's markup, so rebuild it (the typed value is kept).
     const typed = this.#input?.value ?? "";
     this.#renderForm();
     if (this.#input) this.#input.value = typed;
@@ -115,12 +115,14 @@ export class WebThreshold extends HTMLElement {
     const button = this.getAttribute("button");
     // A numeric code wants the phone's number pad: inputmode="numeric".
     const inputmode = this.getAttribute("inputmode") ?? "text";
+    // `masked`: the phrase is typed as dots, like a password, so nobody reads it over a shoulder.
+    const type = this.hasAttribute("masked") ? "password" : "text";
     form.innerHTML = `
       ${label ? `<label part="label" for="threshold-input">${escapeHtml(label)}</label>` : ""}
       <input
         part="input"
         id="threshold-input"
-        type="text"
+        type="${type}"
         inputmode="${escapeHtml(inputmode)}"
         name="threshold"
         placeholder="${escapeHtml(this.getAttribute("placeholder") ?? "")}"

@@ -1275,6 +1275,52 @@ describe("remember in the doors file", () => {
   });
 });
 
+describe("masked in the doors file", () => {
+  const page = () => ({ payloads: { p: { from: source("p.html", "<p>x</p>"), type: "text/html", page: "s/p/index.html" } }, doors: [{ tier: "t", phrase: STRONG, open: ["p"] }] });
+
+  it("shells type the phrase as dots", async () => {
+    write({ ...page(), masked: true });
+    expect(await go({ element: "/* e */" })).toBe(0);
+    expect(readFileSync(join(out, "s/p/index.html"), "utf8")).toMatch(/<web-threshold\b[^>]*\bmasked\b/);
+  });
+
+  it("leaves it off by default", async () => {
+    write(page());
+    expect(await go({ element: "/* e */" })).toBe(0);
+    expect(readFileSync(join(out, "s/p/index.html"), "utf8")).not.toMatch(/<web-threshold\b[^>]*\bmasked\b/);
+  });
+
+  it("refuses a value that isn't true or false", async () => {
+    write({ ...page(), masked: "yes" });
+    expect(await go({ element: "/* e */" })).toBe(1);
+    expect(report()).toContain("masked must be true or false");
+  });
+});
+
+describe("strict in the doors file", () => {
+  it("a short phrase in public text stops the build, and writes nothing", async () => {
+    write({ ...basic("form"), strict: true });
+    site({ "a.html": "<form>hello</form>" });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("the phrase of door fox appears in a.html");
+    expect(report()).not.toMatch(/\bform\b/);
+    expect(existsSync(join(out, BUNDLE_PATH))).toBe(false);
+  });
+
+  it("covers phrases only: a short data value still warns", async () => {
+    write({ ...basic(STRONG, { route: "/x/" }), strict: true });
+    site({ "a.html": '<a href="/x/">x</a>' });
+    expect(await go()).toBe(0);
+    expect(report()).toContain("warning: a data value of door fox appears in a.html");
+  });
+
+  it("refuses a value that isn't true or false", async () => {
+    write({ ...basic(), strict: 1 });
+    expect(await go()).toBe(1);
+    expect(report()).toContain("strict must be true or false");
+  });
+});
+
 describe("in-place safety (i-1, i-2)", () => {
   const SECRET = "<html><body><p>Words nobody should read in the public source of this page.</p></body></html>";
   const one = () => ({ payloads: { p: { type: "text/html", page: "page.html" } }, doors: [{ tier: "t", phrase: STRONG, open: ["p"] }] });

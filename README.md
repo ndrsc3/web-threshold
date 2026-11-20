@@ -23,13 +23,13 @@ flowchart TD
 Pin a tag, so each site upgrades on purpose.
 
 ```bash
-npm install github:ndrsc3/web-threshold#v0.5.0
+npm install github:ndrsc3/web-threshold#v0.6.0
 ```
 
 Plain HTML, with no build step (plain gate only):
 
 ```html
-<script type="module" src="https://cdn.jsdelivr.net/gh/ndrsc3/web-threshold@v0.5.0/dist/web-threshold.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/gh/ndrsc3/web-threshold@v0.6.0/dist/web-threshold.js"></script>
 ```
 
 ## Plain gate
@@ -65,6 +65,7 @@ You map phrases to tiers in your page's script, and react to the tier.
 | `button` | Shows a submit button with this text. Without it, only the return key submits. |
 | `placeholder` | The input's placeholder. |
 | `inputmode` | Passed to the input. `numeric` gets the phone number pad, which has no return key: set `button`, or call `gate.submit()` from your own button. |
+| `masked` | Types the phrase as dots, like a password field, so it can't be read over a shoulder or in a screen share. Add or remove it at any time; what's typed is kept. |
 
 **Styling:** the element inherits `font` and `color`. Restyle any piece from your page with `::part(form)`, `::part(label)`, `::part(input)` and `::part(button)`:
 
@@ -111,6 +112,7 @@ Design notes, plans and the task board are in `docs/plans/` and `docs/TASKS.md`.
 
 ## History
 
+- **v0.6.0** — `masked` attribute: the phrase is typed as dots, like a password field, in plain and sealed mode; `"masked": true` in the doors file puts it on the shells `seal` writes. `"strict": true` in the doors file: a phrase in public output stops the build at any length. This release's guards are proven under the house `mutation-check.py` (`docs/mutations/v0.6.0.json`, its vitest runner).
 - **v0.5.0** — Sealed mode: `web-threshold seal` and the `@ndrsc3/web-threshold/sealed` entry. A phrase opens a sealed record of keys plus free-form `data`; payloads are pure-ciphertext files; whole pages sit behind a shell, or are sealed in place in a built site; `remember="session"` keeps doors open per tab. `seal` proves each phrase opens exactly its own payloads and stops the build when a secret is found in public output. Plain mode is unchanged. Bundle format v1.
 - **v0.4.0** — Visitor policy: `defineThreshold()` (`@ndrsc3/web-threshold/policy`), four presets, raw `extra` lines and `web-threshold robots`. Gate fix: inherited object keys such as `constructor` no longer fire `tier-unlocked`, which changes `dist/web-threshold.js`. Adds the LICENSE file. A site naming a bot that later leaves the list stops building, by design.
 - **v0.3.0** — `label` and `button` attributes; `::part(label)` and `::part(button)`. Labels and button text are HTML-escaped.
