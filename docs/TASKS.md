@@ -9,6 +9,7 @@ Plans: `docs/plans/261102-visitor-policy-level-0.md` · `docs/plans/261029-v0.5-
 - [ ] **Banana Rodeo: whole-site trial done, adoption later** `[GATE]` — owner 261102: revisit later. Open for it: pages in a public repo, its Vercel-hosted build, images stay public; a signed cookie is the alternative for a real lock
 
 ## P2 — next-up
+- [ ] **Release step 2 as one script** `[GATE]` — `scripts/release-check.sh`: clean clone, every check on its own exit code (no `| tail` masking), and a Playwright-browsers-present check first. Three hand-runs so far; v0.6.0's masked a browser failure (run log: `docs/plans/261029-v0.5-encrypted-tiers.md` § Release run — 261120)
 - [ ] **Confirm Vercel middleware cost and log retention** `[GUARD]` — every-request middleware at our traffic on Hobby, before committing to guard level 1
 
 ## P3 — backlog
